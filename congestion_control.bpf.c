@@ -1,9 +1,13 @@
 // vmlinux.hをインクルード
 #include "vmlinux.h"
-#define _LINUX_POSIX_TYPES_H
 #include <bpf/bpf_helpers.h>
 #include <bpf/bpf_endian.h>
-#include <linux/pkt_cls.h>
+
+#define TC_ACT_OK 0
+#define TC_ACT_SHOT 2
+#define TC_ACT_UNSPEC -1
+#define TC_ACT_PIPE 3
+#define TC_ACT_RECLASSIFY 1
 
 // 輻輳情報を格納する構造体
 struct congestion_info
