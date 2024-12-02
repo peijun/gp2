@@ -19,7 +19,7 @@ $(USER_SKEL): $(BPF_OBJ)
 	bpftool gen skeleton $< > $@
 
 $(BPF_OBJ): ${TARGET}.bpf.c
-	clang -g -O2 -target bpf -D__TARGET_ARCH_x86 -I$(LIBBPF_SRC)/build/usr/include -c $< -o $@
+	clang -g -O2 -target bpf -D__TARGET_ARCH_x86 -I$(LIBBPF_SRC) -c $< -o $@
 
 clean:
 	rm -f $(TARGET) $(BPF_OBJ) $(USER_SKEL)
