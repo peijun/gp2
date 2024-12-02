@@ -1,5 +1,6 @@
 // vmlinux.hをインクルード
 #include "vmlinux.h"
+#define _LINUX_POSIX_TYPES_H
 #include <bpf/bpf_helpers.h>
 #include <bpf/bpf_endian.h>
 #include <linux/pkt_cls.h>
