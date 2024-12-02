@@ -4,7 +4,7 @@ BPF_OBJ = ${TARGET}.bpf.o
 USER_C = ${TARGET}.c
 USER_SKEL = ${TARGET}.skel.h
 
-LIBBPF_SRC = /path/to/libbpf/src
+LIBBPF_SRC = /home/peijun/gp2
 LIBBPF_OBJ = $(LIBBPF_SRC)/libbpf.a
 
 CFLAGS = -g -O2 -Wall
