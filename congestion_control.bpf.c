@@ -2,6 +2,7 @@
 #include "vmlinux.h"
 #include <bpf/bpf_helpers.h>
 #include <bpf/bpf_endian.h>
+#include <linux/pkt_cls.h>
 
 // 輻輳情報を格納する構造体
 struct congestion_info
