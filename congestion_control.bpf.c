@@ -2,6 +2,8 @@
 #include "vmlinux.h"
 #include <bpf/bpf_helpers.h>
 #include <bpf/bpf_endian.h>
+#include <bpf/bpf_tracing.h>
+#include <bpf/bpf_core_read.h>
 
 #define TC_ACT_OK 0
 #define TC_ACT_SHOT 2
