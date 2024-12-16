@@ -26,7 +26,6 @@ struct {
     __type(value, struct congestion_info);
 } congestion_map SEC(".maps");
 
-// notification_mapもあるがegressでは参照しない
 struct {
     __uint(type, BPF_MAP_TYPE_ARRAY);
     __uint(max_entries, 1);
@@ -48,7 +47,7 @@ struct {
 
 char LICENSE[] SEC("license") = "GPL";
 
-// egress用: 10秒経過後のウィンドウサイズ調整のみ行う
+// egress用: 10秒経過後、まだ輻輳状態ならウィンドウサイズ半減
 SEC("tc")
 int congestion_control_egress(struct __sk_buff *skb)
 {
@@ -80,30 +79,24 @@ int congestion_control_egress(struct __sk_buff *skb)
 
     __u64 current_time = bpf_ktime_get_ns();
 
-    bool can_apply_congestion_control = false;
+    // 10秒以上経過しているか
+    bool ten_seconds_passed = false;
     if (info->congestion_start_time != 0 &&
         (current_time - info->congestion_start_time) >= DELAY_NS) {
-        can_apply_congestion_control = true;
+        ten_seconds_passed = true;
     }
 
-    if (can_apply_congestion_control) {
-        // intervalやretransmit_countはingressで計測済み。
-        // ここではcongestion_start_timeが非0かつ10秒以上経過したらウィンドウ調整を実行。
-        // 輻輳状態かどうかはcongestion_start_timeが非0で判断できる。
-        // （より厳密な判定が必要なら、ingress側でフラグを別途保存するようにする）
-        bool congestion_detected = (info->congestion_start_time != 0);
+    // 輻輳が依然として継続しているか（congestion_start_timeが非0ならまだ輻輳中）
+    bool still_congested = (info->congestion_start_time != 0);
 
+    if (ten_seconds_passed && still_congested) {
+        // 10秒経っても輻輳が継続していたらウィンドウサイズ半減
         __u32 window_key = key;
         __u32 *current_window_size = bpf_map_lookup_elem(&window_size_map, &window_key);
         if (current_window_size) {
-            __u32 new_window_size;
-            if (congestion_detected) {
-                new_window_size = *current_window_size / 2;
-                if (new_window_size < 1)
-                    new_window_size = 1;
-            } else {
-                new_window_size = *current_window_size + 1;
-            }
+            __u32 new_window_size = *current_window_size / 2;
+            if (new_window_size < 1)
+                new_window_size = 1;
             bpf_map_update_elem(&window_size_map, &window_key, &new_window_size, BPF_ANY);
         } else {
             __u32 initial_window_size = 10;
@@ -111,5 +104,6 @@ int congestion_control_egress(struct __sk_buff *skb)
         }
     }
 
+    // 輻輳が解消された場合や10秒後に輻輳していなければ何もしない（増やさない）
     return TC_ACT_OK;
 }
