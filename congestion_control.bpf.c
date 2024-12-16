@@ -44,14 +44,28 @@ struct {
     __type(value, __u32);
 } window_size_map SEC(".maps");
 
-// ★ここから追加部分（RTMPパケット数をカウントするデバッグ用マップ）
-// key: 0 固定、valueに累計パケット数を記録
+// RTMPパケット数をカウントするデバッグ用マップ
 struct {
     __uint(type, BPF_MAP_TYPE_ARRAY);
     __uint(max_entries, 1);
     __type(key, __u32);
     __type(value, __u32);
 } rtmp_packet_count_map SEC(".maps");
+
+// ★ここから追加: RTMP以外の通信のIPとポートを記録するマップ
+struct ip_port_key {
+    __u32 saddr;
+    __u32 daddr;
+    __u16 source;
+    __u16 dest;
+};
+
+struct {
+    __uint(type, BPF_MAP_TYPE_HASH);
+    __uint(max_entries, 1024);
+    __type(key, struct ip_port_key);
+    __type(value, __u64);
+} non_rtmp_map SEC(".maps");
 // ★ここまで追加
 
 // 定数の定義
@@ -69,29 +83,40 @@ int congestion_control(struct __sk_buff *skb)
     void *data_end = (void *)(long)skb->data_end;
     struct ethhdr *eth = data;
 
-    // イーサネットヘッダーの境界チェック
     if ((void *)(eth + 1) > data_end)
         return TC_ACT_OK;
 
-    // IPヘッダーの取得と境界チェック
     struct iphdr *ip = (void *)(eth + 1);
     if ((void *)(ip + 1) > data_end)
         return TC_ACT_OK;
 
-    // TCPパケットのみを処理
     if (ip->protocol != IPPROTO_TCP)
         return TC_ACT_OK;
 
-    // TCPヘッダーの取得と境界チェック
     struct tcphdr *tcp = (void *)(ip + 1);
     if ((void *)(tcp + 1) > data_end)
         return TC_ACT_OK;
 
-    // RTMP通信以外は通常のCC(=何もしない)
-    if (tcp->source != bpf_htons(RTMP_PORT) && tcp->dest != bpf_htons(RTMP_PORT))
-        return TC_ACT_OK;
+    // ここでRTMP以外の場合はnon_rtmp_mapに記録してreturnする
+    if (tcp->source != bpf_htons(RTMP_PORT) && tcp->dest != bpf_htons(RTMP_PORT)) {
+        struct ip_port_key non_rtmp_key = {
+            .saddr = ip->saddr,
+            .daddr = ip->daddr,
+            .source = tcp->source,
+            .dest = tcp->dest,
+        };
 
-    // ★ここから追加：RTMPパケットを検知したので、rtmp_packet_count_mapのカウンタをインクリメント
+        __u64 *val = bpf_map_lookup_elem(&non_rtmp_map, &non_rtmp_key);
+        if (val) {
+            (*val)++;
+        } else {
+            __u64 init_val = 1;
+            bpf_map_update_elem(&non_rtmp_map, &non_rtmp_key, &init_val, BPF_ANY);
+        }
+        return TC_ACT_OK;
+    }
+
+    // ★RTMP通信は以下のロジックが実行される★
     {
         __u32 counter_key = 0;
         __u32 *counter = bpf_map_lookup_elem(&rtmp_packet_count_map, &counter_key);
@@ -102,9 +127,7 @@ int congestion_control(struct __sk_buff *skb)
             bpf_map_update_elem(&rtmp_packet_count_map, &counter_key, &initial, BPF_ANY);
         }
     }
-    // ★ここまで追加
 
-    // ここからはRTMPトラフィックに対するカスタム輻輳制御処理
     __u32 key = ip->saddr;
     struct congestion_info *info = bpf_map_lookup_elem(&congestion_map, &key);
     if (!info) {
