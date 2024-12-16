@@ -9,10 +9,9 @@
 #define TC_ACT_PIPE 3
 #define TC_ACT_RECLASSIFY 1
 
-// 10秒（ナノ秒換算）
+// 10秒(ナノ秒)
 #define DELAY_NS (10ULL * 1000000000ULL)
 
-// 輻輳情報構造体
 struct congestion_info {
     __u64 last_timestamp;
     __u32 packet_count;
@@ -20,7 +19,6 @@ struct congestion_info {
     __u64 congestion_start_time;
 };
 
-// 共通マップ宣言
 struct {
     __uint(type, BPF_MAP_TYPE_HASH);
     __uint(max_entries, 1024);
@@ -35,7 +33,6 @@ struct {
     __type(value, __u32);
 } notification_map SEC(".maps");
 
-// egress用で使用するためのwindow_size_mapもそのまま存在
 struct {
     __uint(type, BPF_MAP_TYPE_ARRAY);
     __uint(max_entries, 1);
@@ -114,11 +111,11 @@ int congestion_detect_ingress(struct __sk_buff *skb)
             info->congestion_start_time = current_time;
         }
     } else {
+        // 輻輳解消、congestion_start_timeを0にする
         info->congestion_start_time = 0;
         __u32 reset_value = 0;
         bpf_map_update_elem(&notification_map, &notification_key, &reset_value, BPF_ANY);
     }
 
-    // ingress側ではウィンドウサイズ制御はしない
     return TC_ACT_OK;
 }
