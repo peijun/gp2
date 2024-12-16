@@ -44,9 +44,19 @@ struct {
     __type(value, __u32);
 } window_size_map SEC(".maps");
 
+// ★ここから追加部分（RTMPパケット数をカウントするデバッグ用マップ）
+// key: 0 固定、valueに累計パケット数を記録
+struct {
+    __uint(type, BPF_MAP_TYPE_ARRAY);
+    __uint(max_entries, 1);
+    __type(key, __u32);
+    __type(value, __u32);
+} rtmp_packet_count_map SEC(".maps");
+// ★ここまで追加
+
 // 定数の定義
 #define CONGESTION_THRESHOLD 10
-#define PACKET_INTERVAL_THRESHOLD 1000000
+#define PACKET_INTERVAL_THRESHOLD 100000
 #define RETRANSMIT_THRESHOLD 3
 #define RTMP_PORT 1935
 
@@ -81,9 +91,21 @@ int congestion_control(struct __sk_buff *skb)
     if (tcp->source != bpf_htons(RTMP_PORT) && tcp->dest != bpf_htons(RTMP_PORT))
         return TC_ACT_OK;
 
+    // ★ここから追加：RTMPパケットを検知したので、rtmp_packet_count_mapのカウンタをインクリメント
+    {
+        __u32 counter_key = 0;
+        __u32 *counter = bpf_map_lookup_elem(&rtmp_packet_count_map, &counter_key);
+        if (counter) {
+            (*counter)++;
+        } else {
+            __u32 initial = 1;
+            bpf_map_update_elem(&rtmp_packet_count_map, &counter_key, &initial, BPF_ANY);
+        }
+    }
+    // ★ここまで追加
+
     // ここからはRTMPトラフィックに対するカスタム輻輳制御処理
     __u32 key = ip->saddr;
-    // 輻輳情報マップからデータを取得または初期化
     struct congestion_info *info = bpf_map_lookup_elem(&congestion_map, &key);
     if (!info) {
         struct congestion_info new_info = {0};
@@ -93,25 +115,21 @@ int congestion_control(struct __sk_buff *skb)
             return TC_ACT_OK;
     }
 
-    // 現在の時刻を取得し、パケット間隔を計算
     __u64 current_time = bpf_ktime_get_ns();
     __u64 interval = current_time - info->last_timestamp;
     info->last_timestamp = current_time;
 
-    // 再送パケットかどうかを判断
     bool is_retransmit = (tcp->syn || tcp->rst || tcp->fin);
     if (is_retransmit)
         info->retransmit_count++;
     else
         info->packet_count++;
 
-    // 輻輳検出ロジック
     bool congestion_detected = false;
     if (interval < PACKET_INTERVAL_THRESHOLD || info->retransmit_count >= RETRANSMIT_THRESHOLD) {
         congestion_detected = true;
     }
 
-    // 輻輳検出した場合は即座にnotification_mapを更新
     __u32 notification_key = 0;
     if (congestion_detected) {
         __u32 *notification_value = bpf_map_lookup_elem(&notification_map, &notification_key);
@@ -123,27 +141,21 @@ int congestion_control(struct __sk_buff *skb)
             }
         }
 
-        // 輻輳開始時刻が未記録またはリセットされている場合は記録
         if (info->congestion_start_time == 0) {
             info->congestion_start_time = current_time;
         }
     } else {
-        // 輻輳が解消されたら開始時刻をリセット
         info->congestion_start_time = 0;
-
-        // notification_mapをリセット
         __u32 reset_value = 0;
         bpf_map_update_elem(&notification_map, &notification_key, &reset_value, BPF_ANY);
     }
 
-    // 輻輳検出後10秒経過していたら実際のウィンドウサイズ調整を行う
     bool can_apply_congestion_control = false;
     if (info->congestion_start_time != 0 &&
         (current_time - info->congestion_start_time) >= DELAY_NS) {
         can_apply_congestion_control = true;
     }
 
-    // ウィンドウサイズの調整（10秒待ってから実行）
     if (can_apply_congestion_control) {
         __u32 window_key = ip->saddr;
         __u32 *current_window_size = bpf_map_lookup_elem(&window_size_map, &window_key);
