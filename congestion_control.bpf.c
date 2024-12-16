@@ -9,12 +9,15 @@
 #define TC_ACT_PIPE 3
 #define TC_ACT_RECLASSIFY 1
 
+// 10秒（ナノ秒換算）
+#define DELAY_NS (10ULL * 1000000000ULL)
+
 // 輻輳情報を格納する構造体
-struct congestion_info
-{
+struct congestion_info {
     __u64 last_timestamp;
     __u32 packet_count;
     __u32 retransmit_count;
+    __u64 congestion_start_time; // 輻輳検出開始時刻を記録するフィールドを追加
 };
 
 // 輻輳情報を保存するためのBPFマップ
@@ -74,15 +77,15 @@ int congestion_control(struct __sk_buff *skb)
     if ((void *)(tcp + 1) > data_end)
         return TC_ACT_OK;
 
+    // RTMP通信以外は通常のCC(=何もしない)
     if (tcp->source != bpf_htons(RTMP_PORT) && tcp->dest != bpf_htons(RTMP_PORT))
         return TC_ACT_OK;
 
-    // 送信元IPアドレスをキーとして使用
+    // ここからはRTMPトラフィックに対するカスタム輻輳制御処理
     __u32 key = ip->saddr;
     // 輻輳情報マップからデータを取得または初期化
     struct congestion_info *info = bpf_map_lookup_elem(&congestion_map, &key);
-    if (!info)
-    {
+    if (!info) {
         struct congestion_info new_info = {0};
         bpf_map_update_elem(&congestion_map, &key, &new_info, BPF_ANY);
         info = bpf_map_lookup_elem(&congestion_map, &key);
@@ -96,7 +99,7 @@ int congestion_control(struct __sk_buff *skb)
     info->last_timestamp = current_time;
 
     // 再送パケットかどうかを判断
-    bool is_retransmit = tcp->syn || tcp->rst || tcp->fin;
+    bool is_retransmit = (tcp->syn || tcp->rst || tcp->fin);
     if (is_retransmit)
         info->retransmit_count++;
     else
@@ -104,55 +107,60 @@ int congestion_control(struct __sk_buff *skb)
 
     // 輻輳検出ロジック
     bool congestion_detected = false;
-    if (interval < PACKET_INTERVAL_THRESHOLD || info->retransmit_count >= RETRANSMIT_THRESHOLD)
-    {
+    if (interval < PACKET_INTERVAL_THRESHOLD || info->retransmit_count >= RETRANSMIT_THRESHOLD) {
         congestion_detected = true;
     }
 
-    // ウィンドウサイズの調整
-    __u32 window_key = ip->saddr;
-    __u32 *current_window_size = bpf_map_lookup_elem(&window_size_map, &window_key);
-    if (current_window_size)
-    {
-        __u32 new_window_size;
-        if (congestion_detected)
-        {
-            new_window_size = *current_window_size / 2;
-            if (new_window_size < 1)
-                new_window_size = 1;
-        }
-        else
-        {
-            new_window_size = *current_window_size + 1;
-        }
-        bpf_map_update_elem(&window_size_map, &window_key, &new_window_size, BPF_ANY);
-    }
-    else
-    {
-        __u32 initial_window_size = 10;
-        bpf_map_update_elem(&window_size_map, &window_key, &initial_window_size, BPF_ANY);
-    }
-
-    // 輻輳が検出された場合の処理
-    if (congestion_detected)
-    {
-        __u32 notification_key = 0;
+    // 輻輳検出した場合は即座にnotification_mapを更新
+    __u32 notification_key = 0;
+    if (congestion_detected) {
         __u32 *notification_value = bpf_map_lookup_elem(&notification_map, &notification_key);
-        if (notification_value)
-        {
+        if (notification_value) {
             (*notification_value)++;
-            if (*notification_value > CONGESTION_THRESHOLD)
-            {
+            if (*notification_value > CONGESTION_THRESHOLD) {
                 __u32 obs_notification = 1;
                 bpf_map_update_elem(&notification_map, &notification_key, &obs_notification, BPF_ANY);
             }
         }
-    }
-    else
-    {
-        __u32 notification_key = 0;
+
+        // 輻輳開始時刻が未記録またはリセットされている場合は記録
+        if (info->congestion_start_time == 0) {
+            info->congestion_start_time = current_time;
+        }
+    } else {
+        // 輻輳が解消されたら開始時刻をリセット
+        info->congestion_start_time = 0;
+
+        // notification_mapをリセット
         __u32 reset_value = 0;
         bpf_map_update_elem(&notification_map, &notification_key, &reset_value, BPF_ANY);
+    }
+
+    // 輻輳検出後10秒経過していたら実際のウィンドウサイズ調整を行う
+    bool can_apply_congestion_control = false;
+    if (info->congestion_start_time != 0 &&
+        (current_time - info->congestion_start_time) >= DELAY_NS) {
+        can_apply_congestion_control = true;
+    }
+
+    // ウィンドウサイズの調整（10秒待ってから実行）
+    if (can_apply_congestion_control) {
+        __u32 window_key = ip->saddr;
+        __u32 *current_window_size = bpf_map_lookup_elem(&window_size_map, &window_key);
+        if (current_window_size) {
+            __u32 new_window_size;
+            if (congestion_detected) {
+                new_window_size = *current_window_size / 2;
+                if (new_window_size < 1)
+                    new_window_size = 1;
+            } else {
+                new_window_size = *current_window_size + 1;
+            }
+            bpf_map_update_elem(&window_size_map, &window_key, &new_window_size, BPF_ANY);
+        } else {
+            __u32 initial_window_size = 10;
+            bpf_map_update_elem(&window_size_map, &window_key, &initial_window_size, BPF_ANY);
+        }
     }
 
     return TC_ACT_OK;
