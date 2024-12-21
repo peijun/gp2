@@ -48,7 +48,7 @@ extern void tcp_reno_cong_avoid(struct sock *sk, __u32 ack, __u32 acked) __ksym;
 // cong_ops: cong_avoidでウィンドウ調整を実施
 SEC("struct_ops/my_rtmp_cc_cong_avoid")
 void my_rtmp_cc_cong_avoid(struct sock *sk, __u32 ack, __u32 acked) {
-    struct tcp_sock *tp = bpf_tcp_sock(sk);
+    struct tcp_sock *tp = tcp_sk(sk);
     __u64 sid = get_sock_id(tp);
 
     // 輻輳開始時刻
