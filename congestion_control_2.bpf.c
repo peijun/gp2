@@ -67,7 +67,7 @@ int rtmp_sockops(struct bpf_sock_ops *skops)
         if (is_rtmp) {
             // 独自CC適用
             const char rtmp_cc[] = MY_RTMP_CC;
-            bpf_setsockopt(skops, IPPROTO_TCP, TCP_CONGESTION,
+            bpf_setsockopt(skops, SOL_TCP, TCP_CONGESTION,
                            rtmp_cc, sizeof(rtmp_cc));
 
             // rtmp_cc_mapに初期エントリ追加
@@ -78,7 +78,7 @@ int rtmp_sockops(struct bpf_sock_ops *skops)
         } else {
             // 通常CC(例: cubic)
             const char default_cc[] = DEFAULT_CC;
-            bpf_setsockopt(skops, IPPROTO_TCP, TCP_CONGESTION,
+            bpf_setsockopt(skops, SOL_TCP, TCP_CONGESTION,
                            default_cc, sizeof(default_cc));
         }
         return 0;
@@ -119,17 +119,6 @@ int rtmp_sockops(struct bpf_sock_ops *skops)
             __u32 v = 0;
             bpf_map_update_elem(&notification_map, &map_key, &v, BPF_ANY);
         }
-
-        /*
-         * 独自CCアルゴリズム側の詳細: 
-         * "10秒経っても問題が改善しない場合 -> window半減, その後回復"
-         * はカーネルに登録されている "my_rtmp_cc" (tcp_congestion_ops) 内で
-         * 実装される想定。ここ(eBPF sockops)では "輻輳中かどうか" の管理とOBS通知まで。
-         *
-         * もしここで独自にウィンドウ制御するなら、例えば
-         * bpf_setsockopt(skops, IPPROTO_TCP, TCP_WINDOW_CLAMP, ...) などを
-         * 呼び出すことも可能(カーネルバージョン要確認)。
-         */
 
         return 0;
     }
