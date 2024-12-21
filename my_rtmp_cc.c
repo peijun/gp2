@@ -44,15 +44,7 @@ __u32 my_rtmp_cc_ssthresh(struct sock *sk) {
 }
 
 extern void tcp_reno_cong_avoid(struct sock *sk, __u32 ack, __u32 acked) __ksym;
-
-// tcp_reno_cong_avoid のラッパー関数
-BPF_CALL_3(bpf_tcp_reno_cong_avoid_proxy, struct sock *, sk, u32, ack, u32, acked)
-{
-    tcp_reno_cong_avoid(sk, ack, acked);
-    return 0;
-}
-// kfunc の定義
-BTF_FUNC_KIMPL(bpf_tcp_reno_cong_avoid_proxy, BPF_CALL_3(bpf_tcp_reno_cong_avoid_proxy, struct sock *, sk, u32, ack, u32, acked), BTF_KFUNC_UNTRUSTED);
+extern void void tcp_cong_avoid_ai(struct tcp_sock *tp, u32 w, u32 acked) __ksym;
 
 // cong_ops: cong_avoidでウィンドウ調整を実施
 SEC("struct_ops/my_rtmp_cc_cong_avoid")
@@ -68,9 +60,8 @@ void my_rtmp_cc_cong_avoid(struct sock *sk, __u32 ack, __u32 acked) {
     __u32 lost_out = BPF_CORE_READ(tp, lost_out);
 
     if (!in_cong || !start_time) {
-        // 初期状態
         cwnd++;
-        bpf_tcp_reno_cong_avoid_proxy(sk, ack, acked);
+        tcp_cong_avoid_ai(tp, ca->cnt, acked);
         return;
     }
 
@@ -96,12 +87,12 @@ void my_rtmp_cc_cong_avoid(struct sock *sk, __u32 ack, __u32 acked) {
             if (new_cwnd < 1) {
                 new_cwnd = 1;
             }
-            bpf_tcp_reno_cong_avoid_proxy(sk, ack, acked);
+            tcp_cong_avoid_ai(tp, ca->cnt, acked);
         }
     } else {
         // 輻輳解消: 徐々にcwnd増加
         cwnd++;
-        bpf_tcp_reno_cong_avoid_proxy(sk, ack, acked);
+        tcp_cong_avoid_ai(tp, ca->cnt, acked);
     }
 }
 
