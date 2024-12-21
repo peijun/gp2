@@ -45,7 +45,7 @@ __u32 my_rtmp_cc_ssthresh(struct sock *sk) {
 
 extern void tcp_reno_cong_avoid(struct sock *sk, __u32 ack, __u32 acked) __ksym;
 
-SEC("struct_ops/my_rtmp_cc_cong_avoid")
+SEC("struct_ops")
 void BPF_PROG(my_rtmp_cc_cong_avoid, struct sock *sk, __u32 ack, __u32 acked)
 {
     tcp_reno_cong_avoid(sk, ack, acked);
