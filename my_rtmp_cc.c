@@ -45,57 +45,64 @@ __u32 my_rtmp_cc_ssthresh(struct sock *sk) {
 
 extern void tcp_reno_cong_avoid(struct sock *sk, __u32 ack, __u32 acked) __ksym;
 
-// cong_ops: cong_avoidでウィンドウ調整を実施
 SEC("struct_ops/my_rtmp_cc_cong_avoid")
-void my_rtmp_cc_cong_avoid(struct sock *sk, __u32 ack, __u32 acked) {
+void BPF_PROG(my_rtmp_cc_cong_avoid, struct sock *sk, __u32 ack, __u32 acked)
+{
     tcp_reno_cong_avoid(sk, ack, acked);
-    // struct tcp_sock *tp = tcp_sk(sk);
-    // struct bpf_bictcp *ca = inet_csk_ca(sk);
-    // __u64 sid = get_sock_id(tp);
-
-    // // 輻輳開始時刻
-    // __u64 *start_time = bpf_map_lookup_elem(&congestion_start_map, &sid);
-    // bool *in_cong = bpf_map_lookup_elem(&congestion_flag_map, &sid);
-
-    // __u32 cwnd = BPF_CORE_READ(tp, snd_cwnd);
-    // __u32 lost_out = BPF_CORE_READ(tp, lost_out);
-
-    // if (!in_cong || !start_time) {
-    //     cwnd++;
-    //     tcp_cong_avoid_ai(tp, ca->cnt, acked);
-    //     return;
-    // }
-
-    // __u64 now = bpf_ktime_get_ns();
-
-    // if (lost_out > 0) {  // パケットロスが発生した場合、輻輳状態とみなす
-    //     *in_cong = true;
-    //     if (*start_time == 0) {
-    //         *start_time = now;
-    //     }
-    //     if (now - *start_time >= DELAY_NS) {
-    //         return;
-    //     }
-    // } else {
-    //     *in_cong = false;
-    //     *start_time = 0;
-    // }
-
-    // if (*in_cong) {
-    //     if (now - *start_time >= DELAY_NS) {
-    //         // 10秒経過しても輻輳継続: cwnd半減
-    //         __u32 new_cwnd = cwnd / 2;
-    //         if (new_cwnd < 1) {
-    //             new_cwnd = 1;
-    //         }
-    //         tcp_cong_avoid_ai(tp, ca->cnt, acked);
-    //     }
-    // } else {
-    //     // 輻輳解消: 徐々にcwnd増加
-    //     cwnd++;
-    //     tcp_cong_avoid_ai(tp, ca->cnt, acked);
-    // }
 }
+
+
+// // cong_ops: cong_avoidでウィンドウ調整を実施
+// SEC("struct_ops/my_rtmp_cc_cong_avoid")
+// void my_rtmp_cc_cong_avoid(struct sock *sk, __u32 ack, __u32 acked) {
+
+//     // struct tcp_sock *tp = tcp_sk(sk);
+//     // struct bpf_bictcp *ca = inet_csk_ca(sk);
+//     // __u64 sid = get_sock_id(tp);
+
+//     // // 輻輳開始時刻
+//     // __u64 *start_time = bpf_map_lookup_elem(&congestion_start_map, &sid);
+//     // bool *in_cong = bpf_map_lookup_elem(&congestion_flag_map, &sid);
+
+//     // __u32 cwnd = BPF_CORE_READ(tp, snd_cwnd);
+//     // __u32 lost_out = BPF_CORE_READ(tp, lost_out);
+
+//     // if (!in_cong || !start_time) {
+//     //     cwnd++;
+//     //     tcp_cong_avoid_ai(tp, ca->cnt, acked);
+//     //     return;
+//     // }
+
+//     // __u64 now = bpf_ktime_get_ns();
+
+//     // if (lost_out > 0) {  // パケットロスが発生した場合、輻輳状態とみなす
+//     //     *in_cong = true;
+//     //     if (*start_time == 0) {
+//     //         *start_time = now;
+//     //     }
+//     //     if (now - *start_time >= DELAY_NS) {
+//     //         return;
+//     //     }
+//     // } else {
+//     //     *in_cong = false;
+//     //     *start_time = 0;
+//     // }
+
+//     // if (*in_cong) {
+//     //     if (now - *start_time >= DELAY_NS) {
+//     //         // 10秒経過しても輻輳継続: cwnd半減
+//     //         __u32 new_cwnd = cwnd / 2;
+//     //         if (new_cwnd < 1) {
+//     //             new_cwnd = 1;
+//     //         }
+//     //         tcp_cong_avoid_ai(tp, ca->cnt, acked);
+//     //     }
+//     // } else {
+//     //     // 輻輳解消: 徐々にcwnd増加
+//     //     cwnd++;
+//     //     tcp_cong_avoid_ai(tp, ca->cnt, acked);
+//     // }
+// }
 
 // cong_ops: undo_cwnd
 SEC("struct_ops/my_rtmp_cc_undo_cwnd")
