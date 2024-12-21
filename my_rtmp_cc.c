@@ -56,6 +56,16 @@ static __always_inline struct tcp_sock *tcp_sk(const struct sock *sk)
 	return (struct tcp_sock *)sk;
 }
 
+static inline struct inet_connection_sock *inet_csk(const struct sock *sk)
+{
+	return (struct inet_connection_sock *)sk;
+}
+
+static inline void *inet_csk_ca(const struct sock *sk)
+{
+	return (void *)inet_csk(sk)->icsk_ca_priv;
+}
+
 // cong_ops: ssthresh計算
 SEC("struct_ops/my_rtmp_cc_ssthresh")
 __u32 my_rtmp_cc_ssthresh(struct sock *sk) {
