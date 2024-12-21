@@ -43,6 +43,8 @@ __u32 my_rtmp_cc_ssthresh(struct sock *sk) {
     return cwnd / 2 < 2 ? 2 : cwnd / 2;
 }
 
+extern void tcp_reno_cong_avoid(struct sock *sk, __u32 ack, __u32 acked) __ksym;
+
 // cong_ops: cong_avoidでウィンドウ調整を実施
 SEC("struct_ops/my_rtmp_cc_cong_avoid")
 void my_rtmp_cc_cong_avoid(struct sock *sk, __u32 ack, __u32 acked) {
@@ -59,7 +61,7 @@ void my_rtmp_cc_cong_avoid(struct sock *sk, __u32 ack, __u32 acked) {
     if (!in_cong || !start_time) {
         // 初期状態
         cwnd++;
-        tp->snd_cwnd = cwnd;
+        tcp_reno_cong_avoid(sk, ack, acked);
         return;
     }
 
@@ -69,6 +71,9 @@ void my_rtmp_cc_cong_avoid(struct sock *sk, __u32 ack, __u32 acked) {
         *in_cong = true;
         if (*start_time == 0) {
             *start_time = now;
+        }
+        if (now - *start_time >= DELAY_NS) {
+            return;
         }
     } else {
         *in_cong = false;
@@ -82,12 +87,12 @@ void my_rtmp_cc_cong_avoid(struct sock *sk, __u32 ack, __u32 acked) {
             if (new_cwnd < 1) {
                 new_cwnd = 1;
             }
-            tp->snd_cwnd = new_cwnd;
+            tcp_reno_cong_avoid(sk, ack, acked);
         }
     } else {
         // 輻輳解消: 徐々にcwnd増加
         cwnd++;
-        tp->snd_cwnd = cwnd;
+        tcp_reno_cong_avoid(sk, ack, acked);
     }
 }
 
