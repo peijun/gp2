@@ -67,7 +67,7 @@ int rtmp_sockops(struct bpf_sock_ops *skops)
         if (is_rtmp) {
             // 独自CC適用
             const char rtmp_cc[] = MY_RTMP_CC;
-            bpf_setsockopt(skops, SOL_TCP, TCP_CONGESTION,
+            bpf_setsockopt(skops, IPPROTO_TCP,TCP_CONGESTION,
                            rtmp_cc, sizeof(rtmp_cc));
 
             // rtmp_cc_mapに初期エントリ追加
@@ -78,7 +78,7 @@ int rtmp_sockops(struct bpf_sock_ops *skops)
         } else {
             // 通常CC(例: cubic)
             const char default_cc[] = DEFAULT_CC;
-            bpf_setsockopt(skops, SOL_TCP, TCP_CONGESTION,
+            bpf_setsockopt(skops, IPPROTO_TCP,TCP_CONGESTION,
                            default_cc, sizeof(default_cc));
         }
         return 0;
