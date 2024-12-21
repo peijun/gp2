@@ -1,7 +1,4 @@
 // my_rtmp_cc.c
-#include <linux/types.h>
-#include <linux/stddef.h>
-#include <linux/tcp.h>
 #include "vmlinux.h"
 #include <bpf/bpf_helpers.h>
 #include <bpf/bpf_core_read.h>
