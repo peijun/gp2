@@ -31,8 +31,7 @@ static __always_inline __u64 get_sock_id(const struct tcp_sock *tp) {
 
 // cong_ops: ssthresh計算
 SEC(".struct_ops/my_rtmp_cc_ssthresh")
-__u32 BPF_PROG(my_rtmp_cc_ssthresh, struct sock *sk)
-{
+__u32 my_rtmp_cc_ssthresh(struct tcp_sock *tp) {
     __u32 cwnd = BPF_CORE_READ(tp, snd_cwnd);
     return cwnd / 2 < 2 ? 2 : cwnd / 2;
 }
@@ -114,7 +113,6 @@ void my_rtmp_cc_release(struct sock *sk) {
 SEC(".struct_ops") 
 struct tcp_congestion_ops my_rtmp_cc_ops = {
     .init = (void *)my_rtmp_cc_init,
-    .release = (void *)my_rtmp_cc_release,
     .cong_avoid = (void *)my_rtmp_cc_cong_avoid,
     .ssthresh = (void *)my_rtmp_cc_ssthresh,
     .undo_cwnd = (void *)my_rtmp_cc_undo_cwnd,
