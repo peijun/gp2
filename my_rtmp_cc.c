@@ -102,17 +102,12 @@ static void my_rtmp_cc_release(struct sock *sk) {
     bpf_map_delete_elem(&congestion_flag_map, &sid);
 }
 
-// BPF struct_opsを用いてtcp_congestion_opsを登録
-struct bpf_tcp_congestion_ops {
-    int (*init)(struct sock *sk);
-    void (*release)(struct sock *sk);
-    void (*cong_avoid)(struct tcp_sock *tp, __u32 ack, __u32 acked);
-    __u32 (*ssthresh)(struct tcp_sock *tp);
-    __u32 (*undo_cwnd)(struct tcp_sock *tp);
-} my_rtmp_cc_ops SEC(".struct_ops.my_rtmp_cc") = {
+SEC(".struct_ops") 
+my_rtmp_cc_ops = {
     .init = (void *)my_rtmp_cc_init,
     .release = (void *)my_rtmp_cc_release,
     .cong_avoid = (void *)my_rtmp_cc_cong_avoid,
     .ssthresh = (void *)my_rtmp_cc_ssthresh,
     .undo_cwnd = (void *)my_rtmp_cc_undo_cwnd,
+    .name       = "my_rtmp_cc",
 };
