@@ -1,11 +1,10 @@
 // my_rtmp_cc.c
-#include <stddef.h>
-#include <linux/bpf.h>
-#include <linux/types.h>
-#include <linux/stddef.h>
-#include <linux/tcp.h>
+#include "vmlinux.h"
 #include <bpf/bpf_helpers.h>
+#include <bpf/bpf_core_read.h>
+#include <bpf/bpf_endian.h>
 #include <bpf/bpf_tracing.h>
+#include <net/tcp.h>
 
 // 10秒（ナノ秒）
 #define DELAY_NS (10ULL * 1000000000ULL)
@@ -35,7 +34,7 @@ static __always_inline __u64 get_sock_id(const struct tcp_sock *tp) {
 // cong_ops: ssthresh計算
 SEC(".struct_ops/my_rtmp_cc_ssthresh")
 __u32 my_rtmp_cc_ssthresh(struct sock *sk) {
-    const struct tcp_sock *tp = tcp_sk(sk);
+    
     __u32 cwnd = BPF_CORE_READ(tp, snd_cwnd);
     return cwnd / 2 < 2 ? 2 : cwnd / 2;
 }
