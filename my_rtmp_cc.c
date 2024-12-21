@@ -1,10 +1,9 @@
 // my_rtmp_cc.c
-#include "vmlinux.h"
+#include <linux/tcp.h>s
 #include <bpf/bpf_helpers.h>
 #include <bpf/bpf_core_read.h>
 #include <bpf/bpf_endian.h>
 #include <bpf/bpf_tracing.h>
-#include <net/tcp.h>
 
 // 10秒（ナノ秒）
 #define DELAY_NS (10ULL * 1000000000ULL)
