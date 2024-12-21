@@ -10,6 +10,8 @@
 
 char LICENSE[] SEC("license") = "GPL";
 
+extern void bpf_tcp_sock(struct sock *sk) __ksym;
+
 struct {
     __uint(type, BPF_MAP_TYPE_HASH);
     __uint(max_entries, 1024);
