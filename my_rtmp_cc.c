@@ -49,7 +49,6 @@ SEC("struct_ops")
 void BPF_PROG(my_rtmp_cc_cong_avoid, struct sock *sk, __u32 ack, __u32 acked)
 {
     struct tcp_sock *tp = tcp_sk(sk);
-    struct bpf_bictcp *ca = inet_csk_ca(sk);
     __u64 sid = get_sock_id(tp);
 
     // 輻輳開始時刻
@@ -61,7 +60,7 @@ void BPF_PROG(my_rtmp_cc_cong_avoid, struct sock *sk, __u32 ack, __u32 acked)
 
     if (!in_cong || !start_time) {
         cwnd++;
-        tcp_cong_avoid_ai(tp, ca->cnt, acked);
+        tcp_reno_cong_avoid(sk, ack, acked);
         return;
     }
 
@@ -87,12 +86,12 @@ void BPF_PROG(my_rtmp_cc_cong_avoid, struct sock *sk, __u32 ack, __u32 acked)
             if (new_cwnd < 1) {
                 new_cwnd = 1;
             }
-            tcp_cong_avoid_ai(tp, ca->cnt, acked);
+            tcp_reno_cong_avoid(sk, ack, acked);
         }
     } else {
         // 輻輳解消: 徐々にcwnd増加
         cwnd++;
-        tcp_cong_avoid_ai(tp, ca->cnt, acked);
+        tcp_reno_cong_avoid(sk, ack, acked);
     }
 }
 
