@@ -50,6 +50,7 @@ extern void void tcp_cong_avoid_ai(struct tcp_sock *tp, u32 w, u32 acked) __ksym
 SEC("struct_ops/my_rtmp_cc_cong_avoid")
 void my_rtmp_cc_cong_avoid(struct sock *sk, __u32 ack, __u32 acked) {
     struct tcp_sock *tp = tcp_sk(sk);
+    struct bpf_bictcp *ca = inet_csk_ca(sk);
     __u64 sid = get_sock_id(tp);
 
     // 輻輳開始時刻
