@@ -114,7 +114,6 @@ SEC(".struct_ops")
 struct tcp_congestion_ops my_rtmp_cc_ops = {
     .init = (void *)my_rtmp_cc_init,
     .cong_avoid = (void *)my_rtmp_cc_cong_avoid,
-    .ssthresh = (void *)my_rtmp_cc_ssthresh,
     .undo_cwnd = (void *)my_rtmp_cc_undo_cwnd,
     .name       = "my_rtmp_cc",
 };
