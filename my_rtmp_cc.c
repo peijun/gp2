@@ -25,8 +25,8 @@ struct {
 
 // ソケットID取得
 static __always_inline __u64 get_sock_id(const struct tcp_sock *tp) {
-    __u16 num = BPF_CORE_READ(tp, inet_conn.icsk_inet.inet_num);
-    return (__u64)num;
+    __u16 sport = bpf_ntohs(BPF_CORE_READ(tp, inet_conn.icsk_inet.inet_sport));
+    return (__u64)sport;
 }
 
 // cong_ops: ssthresh計算
@@ -89,8 +89,8 @@ static __always_inline __u32 my_rtmp_cc_undo_cwnd(struct tcp_sock *tp) {
 
 // init, release
 static int my_rtmp_cc_init(struct sock *sk) {
-    __u16 num = BPF_CORE_READ(sk, __sk_common.skc_num);
-    __u64 sid = (__u64)num;
+    __u16 sport = bpf_ntohs(BPF_CORE_READ(tp, inet_conn.icsk_inet.inet_sport));
+    __u64 sid = (__u64)sport;
     __u64 zero = 0;
     bool false_val = false;
     bpf_map_update_elem(&congestion_start_map, &sid, &zero, BPF_ANY);
@@ -99,14 +99,14 @@ static int my_rtmp_cc_init(struct sock *sk) {
 }
 
 static void my_rtmp_cc_release(struct sock *sk) {
-    __u16 num = BPF_CORE_READ(sk, __sk_common.skc_num);
-    __u64 sid = (__u64)num;
+    __u16 sport = bpf_ntohs(BPF_CORE_READ(tp, inet_conn.icsk_inet.inet_sport));
+    __u64 sid = (__u64)sport;
     bpf_map_delete_elem(&congestion_start_map, &sid);
     bpf_map_delete_elem(&congestion_flag_map, &sid);
 }
 
 SEC(".struct_ops") 
-my_rtmp_cc_ops = {
+struct tcp_congestion_ops my_rtmp_cc_ops = {
     .init = (void *)my_rtmp_cc_init,
     .release = (void *)my_rtmp_cc_release,
     .cong_avoid = (void *)my_rtmp_cc_cong_avoid,
