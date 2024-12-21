@@ -38,7 +38,7 @@ static __always_inline struct tcp_sock *tcp_sk(const struct sock *sk)
 // cong_ops: ssthresh計算
 SEC(".struct_ops/my_rtmp_cc_ssthresh")
 __u32 my_rtmp_cc_ssthresh(struct sock *sk) {
-    
+    struct tcp_sock *tp = tcp_sk(sk);
     __u32 cwnd = BPF_CORE_READ(tp, snd_cwnd);
     return cwnd / 2 < 2 ? 2 : cwnd / 2;
 }
