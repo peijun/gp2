@@ -100,14 +100,13 @@ __u32 my_rtmp_cc_undo_cwnd(struct tcp_sock *tp) {
 
 // init, release
 SEC(".struct_ops/my_rtmp_cc_init")
-int my_rtmp_cc_init(struct sock *sk) {
+void my_rtmp_cc_init(struct sock *sk) {
     __u16 num = BPF_CORE_READ(sk, __sk_common.skc_num);
     __u64 sid = (__u64)num;
     __u64 zero = 0;
     bool false_val = false;
     bpf_map_update_elem(&congestion_start_map, &sid, &zero, BPF_ANY);
     bpf_map_update_elem(&congestion_flag_map, &sid, &false_val, BPF_ANY);
-    return 0;
 }
 
 SEC(".struct_ops/my_rtmp_cc_release")
