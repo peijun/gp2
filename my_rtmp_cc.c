@@ -30,14 +30,15 @@ static __always_inline __u64 get_sock_id(const struct tcp_sock *tp) {
 }
 
 // cong_ops: ssthresh計算
-SEC(".struct_ops")
-__u32 my_rtmp_cc_ssthresh(struct tcp_sock *tp) {
+SEC(".struct_ops/my_rtmp_cc_ssthresh")
+__u32 BPF_PROG(my_rtmp_cc_ssthresh, struct sock *sk)
+{
     __u32 cwnd = BPF_CORE_READ(tp, snd_cwnd);
     return cwnd / 2 < 2 ? 2 : cwnd / 2;
 }
 
 // cong_ops: cong_avoidでウィンドウ調整を実施
-SEC(".struct_ops")
+SEC(".struct_ops.my_rtmp_cc_cong_avoid")
 void my_rtmp_cc_cong_avoid(struct tcp_sock *tp, __u32 ack, __u32 acked) {
     __u64 sid = get_sock_id(tp);
 
@@ -84,14 +85,14 @@ void my_rtmp_cc_cong_avoid(struct tcp_sock *tp, __u32 ack, __u32 acked) {
 }
 
 // cong_ops: undo_cwnd
-SEC(".struct_ops")
+SEC(".struct_ops.my_rtmp_cc_undo_cwnd")
 __u32 my_rtmp_cc_undo_cwnd(struct tcp_sock *tp) {
     __u32 cwnd = BPF_CORE_READ(tp, snd_cwnd);
     return cwnd < 10 ? 10 : cwnd;
 }
 
 // init, release
-SEC(".struct_ops")
+SEC(".struct_ops.my_rtmp_cc_init")
 int my_rtmp_cc_init(struct sock *sk) {
     __u16 num = BPF_CORE_READ(sk, __sk_common.skc_num);
     __u64 sid = (__u64)num;
@@ -102,7 +103,7 @@ int my_rtmp_cc_init(struct sock *sk) {
     return 0;
 }
 
-SEC(".struct_ops")
+SEC(".struct_ops.my_rtmp_cc_release")
 void my_rtmp_cc_release(struct sock *sk) {
     __u16 num = BPF_CORE_READ(sk, __sk_common.skc_num);
     __u64 sid = (__u64)num;
