@@ -99,7 +99,8 @@ void my_rtmp_cc_cong_avoid(struct sock *sk, __u32 ack, __u32 acked) {
 
 // cong_ops: undo_cwnd
 SEC("struct_ops/my_rtmp_cc_undo_cwnd")
-__u32 my_rtmp_cc_undo_cwnd(struct tcp_sock *tp) {
+__u32 my_rtmp_cc_undo_cwnd(struct sock *sk) {
+    struct tcp_sock *tp = tcp_sk(sk);
     __u32 cwnd = BPF_CORE_READ(tp, snd_cwnd);
     return cwnd < 10 ? 10 : cwnd;
 }
