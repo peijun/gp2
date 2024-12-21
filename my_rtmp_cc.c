@@ -44,7 +44,7 @@ __u32 my_rtmp_cc_ssthresh(struct sock *sk) {
 }
 
 extern void tcp_reno_cong_avoid(struct sock *sk, __u32 ack, __u32 acked) __ksym;
-extern void void tcp_cong_avoid_ai(struct tcp_sock *tp, u32 w, u32 acked) __ksym;
+extern void tcp_cong_avoid_ai(struct tcp_sock *tp, u32 w, u32 acked) __ksym;
 
 // cong_ops: cong_avoidでウィンドウ調整を実施
 SEC("struct_ops/my_rtmp_cc_cong_avoid")
