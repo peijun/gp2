@@ -16,6 +16,10 @@
 // RTTが(適当な閾値)以上になったら輻輳とみなす(サンプル用)
 #define RTT_THRESHOLD 100000  // 単位usec=0.1sなど、値は適宜
 
+#ifndef TCP_CONGESTION
+#define TCP_CONGESTION 13
+#endif
+
 // OBSプラグインへの通知を行うためのマップ
 // key=0固定, valueに通知状態 (0=正常, 1=輻輳検知等)
 struct {
