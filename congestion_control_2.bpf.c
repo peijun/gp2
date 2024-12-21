@@ -55,7 +55,7 @@ int rtmp_sockops(struct bpf_sock_ops *skops)
 {
     __u32 op = (__u32) skops->op;
     // ソケットIDを一意のキーとして使う
-    __u64 sid = bpf_get_sock_id(skops, 0);
+    __u64 sid = bpf_get_socket_cookie(skops);
 
     // 1) コネクション確立時に輻輳制御切り替え (RTMP or not)
     if (op == BPF_SOCK_OPS_ACTIVE_ESTABLISHED_CB ||
