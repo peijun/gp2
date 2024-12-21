@@ -1,5 +1,5 @@
 // my_rtmp_cc.c
-#include <linux/tcp.h>s
+#include "vmlinux.h"
 #include <bpf/bpf_helpers.h>
 #include <bpf/bpf_core_read.h>
 #include <bpf/bpf_endian.h>
@@ -28,6 +28,11 @@ struct {
 static __always_inline __u64 get_sock_id(const struct tcp_sock *tp) {
     __u16 sport = bpf_ntohs(BPF_CORE_READ(tp, inet_conn.icsk_inet.inet_sport));
     return (__u64)sport;
+}
+
+static __always_inline struct tcp_sock *tcp_sk(const struct sock *sk)
+{
+	return (struct tcp_sock *)sk;
 }
 
 // cong_ops: ssthresh計算
