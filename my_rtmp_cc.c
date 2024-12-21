@@ -10,8 +10,6 @@
 
 char LICENSE[] SEC("license") = "GPL";
 
-extern void bpf_tcp_sock(struct sock *sk) __ksym;
-
 struct {
     __uint(type, BPF_MAP_TYPE_HASH);
     __uint(max_entries, 1024);
@@ -48,7 +46,7 @@ __u32 my_rtmp_cc_ssthresh(struct sock *sk) {
 // cong_ops: cong_avoidでウィンドウ調整を実施
 SEC("struct_ops/my_rtmp_cc_cong_avoid")
 void my_rtmp_cc_cong_avoid(struct sock *sk, __u32 ack, __u32 acked) {
-    struct tcp_sock *tp = bpf_tcp_sock(sk);
+    struct tcp_sock *tp = bpf_tcp_sock(*sk);
     __u64 sid = get_sock_id(tp);
 
     // 輻輳開始時刻
