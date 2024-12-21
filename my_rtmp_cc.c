@@ -126,7 +126,7 @@ void my_rtmp_cc_cong_avoid(struct sock *sk, __u32 ack, __u32 acked) {
     //     // 輻輳解消: 徐々にcwnd増加
     //     cwnd++;
     //     tcp_cong_avoid_ai(tp, ca->cnt, acked);
-    }
+    // }
 }
 
 // cong_ops: undo_cwnd
