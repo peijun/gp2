@@ -6,7 +6,7 @@
 #include <bpf/bpf_tracing.h>
 
 // 10秒（ナノ秒）
-#define DELAY_NS (5ULL * 1000000000ULL)
+#define DELAY_NS (3ULL * 1000000000ULL)
 
 char LICENSE[] SEC("license") = "GPL";
 
