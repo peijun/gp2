@@ -43,7 +43,7 @@ __u32 my_rtmp_cc_ssthresh(struct sock *sk) {
     return cwnd / 2 < 2 ? 2 : cwnd / 2;
 }
 
-extern void cubictcp_cong_avoid(struct sock *sk, __u32 ack, __u32 acked) __ksym;
+extern void tcp_reno_cong_avoid(struct sock *sk, __u32 ack, __u32 acked) __ksym;
 
 SEC("struct_ops")
 void BPF_PROG(my_rtmp_cc_cong_avoid, struct sock *sk, __u32 ack, __u32 acked)
@@ -71,13 +71,13 @@ void BPF_PROG(my_rtmp_cc_cong_avoid, struct sock *sk, __u32 ack, __u32 acked)
 
     if (*in_cong) {
         if (now - *start_time >= DELAY_NS) {
-            cubictcp_cong_avoid(sk, ack, acked);
+            tcp_reno_cong_avoid(sk, ack, acked);
         } else {
             bpf_printk("Waiting for 3 seconds to adjust cwnd.");
             return;
         }
     } else {
-        cubictcp_cong_avoid(sk, ack, acked);
+        tcp_reno_cong_avoid(sk, ack, acked);
     }
 }
 
