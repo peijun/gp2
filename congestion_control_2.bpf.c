@@ -69,7 +69,7 @@ int rtmp_sockops(struct bpf_sock_ops *skops)
         bool is_rtmp = (lport == RTMP_PORT || rport == RTMP_PORT);
 
         if (is_rtmp) {
-            // 独自CC適用
+            bpf_printk("set rtmp cc");
             const char rtmp_cc[] = MY_RTMP_CC;
             bpf_setsockopt(skops, IPPROTO_TCP,TCP_CONGESTION,
                            rtmp_cc, sizeof(rtmp_cc));
