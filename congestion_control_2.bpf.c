@@ -64,12 +64,15 @@ int rtmp_sockops(struct bpf_sock_ops *skops)
         // 送信元ポート(local_port) or 送信先ポート(remote_port) が1935ならRTMP通信とみなす
         __u16 lport = bpf_ntohs(skops->local_port);
         __u16 rport = skops->remote_port;
+        __u32 daddr = skops->remote_ip4;
+        __u16 daddr2 = bpf_ntohs(skops->remote_ip4);
+
 
         // RTMP判定
         bool is_rtmp = (lport == RTMP_PORT || rport == RTMP_PORT);
 
-        bpf_printk("sid=%llu, lport=%u, rport=%u, is_rtmp=%d",
-                   sid, lport, rport, is_rtmp);
+        bpf_printk("sid=%llu, lport=%u, rport=%u, is_rtmp=%d, daddr=%u, daddr2=%u\n",
+                   sid, lport, rport, is_rtmp, daddr, daddr2);
         if (is_rtmp) {
             bpf_printk("set rtmp cc");
             const char rtmp_cc[] = MY_RTMP_CC;
