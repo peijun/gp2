@@ -6,7 +6,7 @@
 #include <bpf/bpf_endian.h>
 
 // 独自CCの名前 (カーネル側でtcp_congestion_opsとして登録済み想定)
-#define MY_RTMP_CC "my_rtmp_cc"
+#define MY_RTMP_CC "my_rtmp_cc_2"
 // 通常のCC（例: cubic）
 #define DEFAULT_CC "cubic"
 
