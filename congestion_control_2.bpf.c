@@ -81,6 +81,7 @@ int rtmp_sockops(struct bpf_sock_ops *skops)
             bpf_map_update_elem(&rtmp_cc_map, &sid, &info, BPF_ANY);
         } else {
             // 通常CC(例: cubic)
+            bpf_printk("set normal cc");
             const char default_cc[] = DEFAULT_CC;
             bpf_setsockopt(skops, IPPROTO_TCP,TCP_CONGESTION,
                            default_cc, sizeof(default_cc));
