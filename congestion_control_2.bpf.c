@@ -68,6 +68,8 @@ int rtmp_sockops(struct bpf_sock_ops *skops)
         // RTMP判定
         bool is_rtmp = (lport == RTMP_PORT || rport == RTMP_PORT);
 
+        bpf_printk("sid=%llu, lport=%u, rport=%u, is_rtmp=%d",
+                   sid, lport, rport, is_rtmp);
         if (is_rtmp) {
             bpf_printk("set rtmp cc");
             const char rtmp_cc[] = MY_RTMP_CC;
