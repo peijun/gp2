@@ -55,6 +55,12 @@ void BPF_PROG(my_rtmp_cc_cong_avoid, struct sock *sk, __u32 ack, __u32 acked)
     __u64 *start_time = bpf_map_lookup_elem(&congestion_start_map, &sid);
     bool *in_cong = bpf_map_lookup_elem(&congestion_flag_map, &sid);
 
+    if (!in_cong || !start_time) {
+        // マップにエントリが存在しない場合は初期化するか、適切な処理を行う
+        bpf_printk("Map lookup failed for sid: %llu", sid);
+        return;
+    }
+
     __u32 lost_out = BPF_CORE_READ(tp, lost_out);
     __u64 now = bpf_ktime_get_ns();
 
