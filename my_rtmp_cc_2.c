@@ -1,20 +1,5 @@
 // SPDX-License-Identifier: GPL-2.0-only
 
-/* WARNING: This implementation is not necessarily the same
- * as the tcp_cubic.c.  The purpose is mainly for testing
- * the kernel BPF logic.
- *
- * Highlights:
- *
- * 1. CONFIG_HZ .kconfig map is used.
- * 2. In bictcp_update(), calculation is changed to use usec
- *    resolution (i.e. USEC_PER_JIFFY) instead of using jiffies.
- *    Thus, usecs_to_jiffies() is not used in the bpf_cubic.c.
- * 3. In bitctcp_update() [under tcp_friendliness], the original
- *    "while (ca->ack_cnt > delta)" loop is changed to the equivalent
- *    "ca->ack_cnt / delta" operation.
- */
-
 #include "bpf_tracing_net.h"
 #include <bpf/bpf_tracing.h>
 
@@ -281,8 +266,9 @@ static __u32 cubic_root(__u64 a)
 
 /*
  * Compute congestion window to use.
+ * インライン化されたbictcp_updateロジック
  */
-static void bictcp_update(struct bpf_bictcp *ca, __u32 cwnd, __u32 acked)
+static void inline_bictcp_update(struct bpf_bictcp *ca, __u32 cwnd, __u32 acked)
 {
     __u32 delta, bic_target, max_cnt;
     __u64 offs, t;
@@ -409,7 +395,7 @@ void BPF_PROG(bpf_rtmp_cc_2_cong_avoid, struct sock *sk, __u32 ack, __u32 acked)
         __u32 now = tcp_jiffies32;
         if ((now - ca->cong_detect_time) >= (3 * HZ)) { /* 3秒待機 */
             /* 3秒経過後も輻輳が継続している場合に輻輳回避を実行 */
-            bictcp_update(ca, tp->snd_cwnd, acked);
+            inline_bictcp_update(ca, tp->snd_cwnd, acked);
             tcp_cong_avoid_ai(tp, ca->cnt, acked);
             ca->cong_waiting = 0; /* フラグをリセット */
         } else {
@@ -425,7 +411,7 @@ void BPF_PROG(bpf_rtmp_cc_2_cong_avoid, struct sock *sk, __u32 ack, __u32 acked)
         if (!acked)
             return;
     }
-    bictcp_update(ca, tp->snd_cwnd, acked);
+    inline_bictcp_update(ca, tp->snd_cwnd, acked);
     tcp_cong_avoid_ai(tp, ca->cnt, acked);
 }
 
