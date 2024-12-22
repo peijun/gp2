@@ -62,8 +62,7 @@ void BPF_PROG(my_rtmp_cc_cong_avoid, struct sock *sk, __u32 ack, __u32 acked)
         *in_cong = true;
         if (*start_time == 0) {
             *start_time = now;
-            bpf_probe_read_kernel_str(msg_start, sizeof(msg_start), "Congestion detected, start_time set.");
-            bpf_trace_printk("%s\n", msg_start);
+            bpf_trace_printk("Congestion detected, start_time set.");
         }
     } else {
         *in_cong = false;
@@ -74,10 +73,7 @@ void BPF_PROG(my_rtmp_cc_cong_avoid, struct sock *sk, __u32 ack, __u32 acked)
         if (now - *start_time >= DELAY_NS) {
             cubictcp_cong_avoid(sk, ack, acked);
         } else {
-            // ログ: まだ待機期間中
-            char msg_wait[MAX_LOG_LEN];
-            bpf_probe_read_kernel_str(msg_wait, sizeof(msg_wait), "Waiting for 3 seconds to adjust cwnd.");
-            bpf_trace_printk("%s\n", msg_wait);
+            bpf_trace_printk("Waiting for 3 seconds to adjust cwnd.");
             return;
         }
     } else {
@@ -103,10 +99,7 @@ void my_rtmp_cc_init(struct sock *sk) {
     bpf_map_update_elem(&congestion_start_map, &sid, &zero, BPF_ANY);
     bpf_map_update_elem(&congestion_flag_map, &sid, &false_val, BPF_ANY);
 
-    // ログ: ソケットの初期化
-    char msg_init[MAX_LOG_LEN];
-    bpf_probe_read_kernel_str(msg_init, sizeof(msg_init), "Socket initialized.");
-    bpf_trace_printk("%s\n", msg_init);x
+    bpf_trace_printk("Socket initialized.");
 }
 
 SEC("struct_ops/my_rtmp_cc_release")
