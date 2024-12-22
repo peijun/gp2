@@ -43,7 +43,7 @@ __u32 my_rtmp_cc_ssthresh(struct sock *sk) {
     return cwnd / 2 < 2 ? 2 : cwnd / 2;
 }
 
-extern void tcp_reno_cong_avoid(struct sock *sk, __u32 ack, __u32 acked) __ksym;
+extern void cubictcp_cong_avoid(struct sock *sk, __u32 ack, __u32 acked) __ksym;
 
 SEC("struct_ops")
 void BPF_PROG(my_rtmp_cc_cong_avoid, struct sock *sk, __u32 ack, __u32 acked)
@@ -55,24 +55,15 @@ void BPF_PROG(my_rtmp_cc_cong_avoid, struct sock *sk, __u32 ack, __u32 acked)
     __u64 *start_time = bpf_map_lookup_elem(&congestion_start_map, &sid);
     bool *in_cong = bpf_map_lookup_elem(&congestion_flag_map, &sid);
 
-    __u32 cwnd = BPF_CORE_READ(tp, snd_cwnd);
     __u32 lost_out = BPF_CORE_READ(tp, lost_out);
-
-    if (!in_cong || !start_time) {
-        cwnd++;
-        tcp_reno_cong_avoid(sk, ack, acked);
-        return;
-    }
-
     __u64 now = bpf_ktime_get_ns();
 
     if (lost_out > 0) {  // パケットロスが発生した場合、輻輳状態とみなす
         *in_cong = true;
         if (*start_time == 0) {
             *start_time = now;
-        }
-        if (now - *start_time >= DELAY_NS) {
-            return;
+            bpf_probe_read_kernel_str(msg_start, sizeof(msg_start), "Congestion detected, start_time set.");
+            bpf_trace_printk("%s\n", msg_start);
         }
     } else {
         *in_cong = false;
@@ -81,17 +72,16 @@ void BPF_PROG(my_rtmp_cc_cong_avoid, struct sock *sk, __u32 ack, __u32 acked)
 
     if (*in_cong) {
         if (now - *start_time >= DELAY_NS) {
-            // 10秒経過しても輻輳継続: cwnd半減
-            __u32 new_cwnd = cwnd / 2;
-            if (new_cwnd < 1) {
-                new_cwnd = 1;
-            }
-            tcp_reno_cong_avoid(sk, ack, acked);
+            cubictcp_cong_avoid(sk, ack, acked);
+        } else {
+            // ログ: まだ待機期間中
+            char msg_wait[MAX_LOG_LEN];
+            bpf_probe_read_kernel_str(msg_wait, sizeof(msg_wait), "Waiting for 3 seconds to adjust cwnd.");
+            bpf_trace_printk("%s\n", msg_wait);
+            return;
         }
     } else {
-        // 輻輳解消: 徐々にcwnd増加
-        cwnd++;
-        tcp_reno_cong_avoid(sk, ack, acked);
+        cubictcp_cong_avoid(sk, ack, acked);
     }
 }
 
@@ -112,6 +102,11 @@ void my_rtmp_cc_init(struct sock *sk) {
     bool false_val = false;
     bpf_map_update_elem(&congestion_start_map, &sid, &zero, BPF_ANY);
     bpf_map_update_elem(&congestion_flag_map, &sid, &false_val, BPF_ANY);
+
+    // ログ: ソケットの初期化
+    char msg_init[MAX_LOG_LEN];
+    bpf_probe_read_kernel_str(msg_init, sizeof(msg_init), "Socket initialized.");
+    bpf_trace_printk("%s\n", msg_init);x
 }
 
 SEC("struct_ops/my_rtmp_cc_release")
