@@ -62,7 +62,7 @@ void BPF_PROG(my_rtmp_cc_cong_avoid, struct sock *sk, __u32 ack, __u32 acked)
         *in_cong = true;
         if (*start_time == 0) {
             *start_time = now;
-            bpf_trace_printk("Congestion detected, start_time set.");
+            bpf_printk("Congestion detected, start_time set.");
         }
     } else {
         *in_cong = false;
@@ -73,7 +73,7 @@ void BPF_PROG(my_rtmp_cc_cong_avoid, struct sock *sk, __u32 ack, __u32 acked)
         if (now - *start_time >= DELAY_NS) {
             cubictcp_cong_avoid(sk, ack, acked);
         } else {
-            bpf_trace_printk("Waiting for 3 seconds to adjust cwnd.");
+            bpf_printk("Waiting for 3 seconds to adjust cwnd.");
             return;
         }
     } else {
@@ -99,7 +99,7 @@ void my_rtmp_cc_init(struct sock *sk) {
     bpf_map_update_elem(&congestion_start_map, &sid, &zero, BPF_ANY);
     bpf_map_update_elem(&congestion_flag_map, &sid, &false_val, BPF_ANY);
 
-    bpf_trace_printk("Socket initialized.");
+    bpf_printk("Socket initialized.");
 }
 
 SEC("struct_ops/my_rtmp_cc_release")
