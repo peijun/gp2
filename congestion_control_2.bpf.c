@@ -63,7 +63,7 @@ int rtmp_sockops(struct bpf_sock_ops *skops)
         // ポート判定 (RTMP_PORT=1935 なら独自CC)
         // 送信元ポート(local_port) or 送信先ポート(remote_port) が1935ならRTMP通信とみなす
         __u16 lport = bpf_ntohs(skops->local_port);
-        __u16 rport = bpf_ntohs(skops->remote_port);
+        __u16 rport = skops->remote_port;
 
         // RTMP判定
         bool is_rtmp = (lport == RTMP_PORT || rport == RTMP_PORT);
