@@ -49,7 +49,9 @@ SEC("struct_ops")
 void BPF_PROG(my_rtmp_cc_cong_avoid, struct sock *sk, __u32 ack, __u32 acked)
 {
     struct tcp_sock *tp = tcp_sk(sk);
-    __u64 sid = get_sock_id(tp);
+    
+    __u16 num = BPF_CORE_READ(sk, __sk_common.skc_num);
+    __u64 sid = (__u64)num;
 
     // 輻輳開始時刻
     __u64 *start_time = bpf_map_lookup_elem(&congestion_start_map, &sid);
@@ -99,8 +101,7 @@ __u32 my_rtmp_cc_undo_cwnd(struct sock *sk) {
 SEC("struct_ops/my_rtmp_cc_init")
 void my_rtmp_cc_init(struct sock *sk) {
     __u16 num = BPF_CORE_READ(sk, __sk_common.skc_num);
-    struct tcp_sock *tp = tcp_sk(sk);
-    __u64 sid = get_sock_id(tp);
+    __u64 sid = (__u64)num;
     __u64 zero = 0;
     bool false_val = false;
     bpf_map_update_elem(&congestion_start_map, &sid, &zero, BPF_ANY);
@@ -111,8 +112,8 @@ void my_rtmp_cc_init(struct sock *sk) {
 
 SEC("struct_ops/my_rtmp_cc_release")
 void my_rtmp_cc_release(struct sock *sk) {
-    struct tcp_sock *tp = tcp_sk(sk);
-    __u64 sid = get_sock_id(tp);
+    __u16 num = BPF_CORE_READ(sk, __sk_common.skc_num);
+    __u64 sid = (__u64)num;
     bpf_map_delete_elem(&congestion_start_map, &sid);
     bpf_map_delete_elem(&congestion_flag_map, &sid);
 }
