@@ -59,7 +59,11 @@ void BPF_PROG(my_rtmp_cc_cong_avoid, struct sock *sk, __u32 ack, __u32 acked)
 
     if (!in_cong || !start_time) {
         // マップにエントリが存在しない場合は初期化するか、適切な処理を行う
+        __u64 zero = 0;
+        bool false_val = false;
         bpf_printk("Map lookup failed for sid: %llu", sid);
+        bpf_map_update_elem(&congestion_start_map, &sid, &zero, BPF_ANY);
+        bpf_map_update_elem(&congestion_flag_map, &sid, &false_val, BPF_ANY);
         return;
     }
 
