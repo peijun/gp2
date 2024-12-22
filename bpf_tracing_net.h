@@ -2,7 +2,7 @@
 #ifndef __BPF_TRACING_NET_H__
 #define __BPF_TRACING_NET_H__
 
-#include <vmlinux.h>
+#include "vmlinux.h"
 #include <bpf/bpf_core_read.h>
 
 #define AF_INET			2
