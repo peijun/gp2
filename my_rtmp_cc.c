@@ -81,6 +81,9 @@ void BPF_PROG(my_rtmp_cc_cong_avoid, struct sock *sk, __u32 ack, __u32 acked)
         *start_time = 0;
     }
 
+    __u32 cwnd_before = BPF_CORE_READ(tp, snd_cwnd);
+    bpf_printk("Before adjusting cwnd: %u", cwnd_before);
+
     if (*in_cong) {
         if (now - *start_time >= DELAY_NS) {
             tcp_reno_cong_avoid(sk, ack, acked);
@@ -91,6 +94,8 @@ void BPF_PROG(my_rtmp_cc_cong_avoid, struct sock *sk, __u32 ack, __u32 acked)
     } else {
         tcp_reno_cong_avoid(sk, ack, acked);
     }
+    __u32 cwnd_after = BPF_CORE_READ(tp, snd_cwnd);
+    bpf_printk("After adjusting cwnd: %u", cwnd_after);
 }
 
 // cong_ops: undo_cwnd
