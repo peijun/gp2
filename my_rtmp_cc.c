@@ -45,6 +45,13 @@ __u32 my_rtmp_cc_ssthresh(struct sock *sk) {
 
 extern void tcp_reno_cong_avoid(struct sock *sk, __u32 ack, __u32 acked) __ksym;
 
+#define BICTCP_BETA_SCALE    1024
+#define	BICTCP_HZ		10	/* BIC HZ 2^10 = 1024 */
+#define HZ CONFIG_HZ
+#define USEC_PER_MSEC	1000UL
+#define USEC_PER_SEC	1000000UL
+#define USEC_PER_JIFFY	(USEC_PER_SEC / HZ)
+
 /* BIC TCP Parameters */
 struct bpf_bictcp {
 	__u32	cnt;		/* increase cwnd by 1 after ACKs */
