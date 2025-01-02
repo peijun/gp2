@@ -55,6 +55,9 @@ extern unsigned long CONFIG_HZ __kconfig;
 
 static const __u64 cube_factor = (__u64)(1ull << (10+3*BICTCP_HZ))
 				/ (bic_scale * 10);
+static const __u32 cube_rtt_scale = (bic_scale * 10);	/* 1024*c/rtt */
+static const __u32 beta_scale = 8*(BICTCP_BETA_SCALE+beta) / 3
+				/ (BICTCP_BETA_SCALE - beta);
 
 /* BIC TCP Parameters */
 struct bpf_bictcp {
