@@ -199,6 +199,7 @@ SEC("struct_ops")
 void BPF_PROG(my_rtmp_cc_cong_avoid, struct sock *sk, __u32 ack, __u32 acked)
 {
     struct tcp_sock *tp = tcp_sk(sk);
+    struct bpf_bictcp *ca = inet_csk_ca(sk);
     
     __u16 num = BPF_CORE_READ(sk, __sk_common.skc_num);
     __u64 sid = (__u64)num;
