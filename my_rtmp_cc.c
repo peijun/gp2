@@ -45,6 +45,11 @@ __u32 my_rtmp_cc_ssthresh(struct sock *sk) {
 
 extern void tcp_reno_cong_avoid(struct sock *sk, __u32 ack, __u32 acked) __ksym;
 
+static int fast_convergence = 1;
+static const int beta = 717;	/* = 717/1024 (BICTCP_BETA_SCALE) */
+static int initial_ssthresh;
+static const int bic_scale = 41;
+static int tcp_friendliness = 1;
 extern unsigned long CONFIG_HZ __kconfig;
 #define BICTCP_BETA_SCALE    1024
 #define	BICTCP_HZ		10	/* BIC HZ 2^10 = 1024 */
