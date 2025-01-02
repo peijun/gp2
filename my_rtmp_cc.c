@@ -45,6 +45,17 @@ __u32 my_rtmp_cc_ssthresh(struct sock *sk) {
 
 extern void tcp_reno_cong_avoid(struct sock *sk, __u32 ack, __u32 acked) __ksym;
 
+static const __u8 v[] = {
+	/* 0x00 */    0,   54,   54,   54,  118,  118,  118,  118,
+	/* 0x08 */  123,  129,  134,  138,  143,  147,  151,  156,
+	/* 0x10 */  157,  161,  164,  168,  170,  173,  176,  179,
+	/* 0x18 */  181,  185,  187,  190,  192,  194,  197,  199,
+	/* 0x20 */  200,  202,  204,  206,  209,  211,  213,  215,
+	/* 0x28 */  217,  219,  221,  222,  224,  225,  227,  229,
+	/* 0x30 */  231,  232,  234,  236,  237,  239,  240,  242,
+	/* 0x38 */  244,  245,  246,  248,  250,  251,  252,  254,
+};
+
 static int fast_convergence = 1;
 static const int beta = 717;	/* = 717/1024 (BICTCP_BETA_SCALE) */
 static int initial_ssthresh;
