@@ -112,21 +112,21 @@ static void bictcp_update(struct bpf_bictcp *ca, __u32 cwnd, __u32 acked)
 	ca->ack_cnt += acked;	/* count the number of ACKed packets */
 
 	if (ca->last_cwnd == cwnd &&
-	    (__s64)(tcp_jiffies64 - ca->last_time) <= HZ / 32)
+	    (__s64)(bpf_jiffies64 - ca->last_time) <= HZ / 32)
 		return;
 
 	/* The CUBIC function can update ca->cnt at most once per jiffy.
 	 * On all cwnd reduction events, ca->epoch_start is set to 0,
 	 * which will force a recalculation of ca->cnt.
 	 */
-	if (ca->epoch_start && tcp_jiffies64 == ca->last_time)
+	if (ca->epoch_start && bpf_jiffies64 == ca->last_time)
 		goto tcp_friendliness;
 
 	ca->last_cwnd = cwnd;
-	ca->last_time = tcp_jiffies64;
+	ca->last_time = bpf_jiffies64;
 
 	if (ca->epoch_start == 0) {
-		ca->epoch_start = tcp_jiffies64;	/* record beginning */
+		ca->epoch_start = bpf_jiffies64;	/* record beginning */
 		ca->ack_cnt = acked;			/* start counting */
 		ca->tcp_cwnd = cwnd;			/* syn with cubic */
 
@@ -157,7 +157,7 @@ static void bictcp_update(struct bpf_bictcp *ca, __u32 cwnd, __u32 acked)
 	 * if the cwnd < 1 million packets !!!
 	 */
 
-	t = (__s32)(tcp_jiffies32 - ca->epoch_start) * USEC_PER_JIFFY;
+	t = (__s64)(bpf_jiffies64 - ca->epoch_start) * USEC_PER_JIFFY;
 	t += ca->delay_min;
 	/* change the unit from usec to bictcp_HZ */
 	t <<= BICTCP_HZ;
