@@ -45,6 +45,28 @@ __u32 my_rtmp_cc_ssthresh(struct sock *sk) {
 
 extern void tcp_reno_cong_avoid(struct sock *sk, __u32 ack, __u32 acked) __ksym;
 
+/* BIC TCP Parameters */
+struct bpf_bictcp {
+	__u32	cnt;		/* increase cwnd by 1 after ACKs */
+	__u32	last_max_cwnd;	/* last maximum snd_cwnd */
+	__u32	last_cwnd;	/* the last snd_cwnd */
+	__u32	last_time;	/* time when updated last_cwnd */
+	__u32	bic_origin_point;/* origin point of bic function */
+	__u32	bic_K;		/* time to origin point
+				   from the beginning of the current epoch */
+	__u32	delay_min;	/* min delay (usec) */
+	__u32	epoch_start;	/* beginning of an epoch */
+	__u32	ack_cnt;	/* number of acks */
+	__u32	tcp_cwnd;	/* estimated tcp cwnd */
+	__u16	unused;
+	__u8	sample_cnt;	/* number of samples to decide curr_rtt */
+	__u8	found;		/* the exit point is found? */
+	__u32	round_start;	/* beginning of each round */
+	__u32	end_seq;	/* end_seq of the round */
+	__u32	last_ack;	/* last time when the ACK spacing is close */
+	__u32	curr_rtt;	/* the minimum rtt of current round */
+};
+
 static __u64 div64_u64(__u64 dividend, __u64 divisor)
 {
 	return dividend / divisor;
