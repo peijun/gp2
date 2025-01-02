@@ -45,6 +45,156 @@ __u32 my_rtmp_cc_ssthresh(struct sock *sk) {
 
 extern void tcp_reno_cong_avoid(struct sock *sk, __u32 ack, __u32 acked) __ksym;
 
+static __u64 div64_u64(__u64 dividend, __u64 divisor)
+{
+	return dividend / divisor;
+}
+
+#define max(a, b) ((a) > (b) ? (a) : (b))
+
+static __u32 cubic_root(__u64 a)
+{
+	__u32 x, b, shift;
+
+	if (a < 64) {
+		/* a in [0..63] */
+		return ((__u32)v[(__u32)a] + 35) >> 6;
+	}
+
+	b = fls64(a);
+	b = ((b * 84) >> 8) - 1;
+	shift = (a >> (b * 3));
+
+	/* it is needed for verifier's bound check on v */
+	if (shift >= 64)
+		return 0;
+
+	x = ((__u32)(((__u32)v[shift] + 10) << b)) >> 6;
+
+	/*
+	 * Newton-Raphson iteration
+	 *                         2
+	 * x    = ( 2 * x  +  a / x  ) / 3
+	 *  k+1          k         k
+	 */
+	x = (2 * x + (__u32)div64_u64(a, (__u64)x * (__u64)(x - 1)));
+	x = ((x * 341) >> 10);
+	return x;
+}
+
+static void bictcp_update(struct bpf_bictcp *ca, __u32 cwnd, __u32 acked)
+{
+	__u32 delta, bic_target, max_cnt;
+	__u64 offs, t;
+
+	ca->ack_cnt += acked;	/* count the number of ACKed packets */
+
+	if (ca->last_cwnd == cwnd &&
+	    (__s32)(tcp_jiffies32 - ca->last_time) <= HZ / 32)
+		return;
+
+	/* The CUBIC function can update ca->cnt at most once per jiffy.
+	 * On all cwnd reduction events, ca->epoch_start is set to 0,
+	 * which will force a recalculation of ca->cnt.
+	 */
+	if (ca->epoch_start && tcp_jiffies32 == ca->last_time)
+		goto tcp_friendliness;
+
+	ca->last_cwnd = cwnd;
+	ca->last_time = tcp_jiffies32;
+
+	if (ca->epoch_start == 0) {
+		ca->epoch_start = tcp_jiffies32;	/* record beginning */
+		ca->ack_cnt = acked;			/* start counting */
+		ca->tcp_cwnd = cwnd;			/* syn with cubic */
+
+		if (ca->last_max_cwnd <= cwnd) {
+			ca->bic_K = 0;
+			ca->bic_origin_point = cwnd;
+		} else {
+			/* Compute new K based on
+			 * (wmax-cwnd) * (srtt>>3 / HZ) / c * 2^(3*bictcp_HZ)
+			 */
+			ca->bic_K = cubic_root(cube_factor
+					       * (ca->last_max_cwnd - cwnd));
+			ca->bic_origin_point = ca->last_max_cwnd;
+		}
+	}
+
+	/* cubic function - calc*/
+	/* calculate c * time^3 / rtt,
+	 *  while considering overflow in calculation of time^3
+	 * (so time^3 is done by using 64 bit)
+	 * and without the support of division of 64bit numbers
+	 * (so all divisions are done by using 32 bit)
+	 *  also NOTE the unit of those variables
+	 *	  time  = (t - K) / 2^bictcp_HZ
+	 *	  c = bic_scale >> 10
+	 * rtt  = (srtt >> 3) / HZ
+	 * !!! The following code does not have overflow problems,
+	 * if the cwnd < 1 million packets !!!
+	 */
+
+	t = (__s32)(tcp_jiffies32 - ca->epoch_start) * USEC_PER_JIFFY;
+	t += ca->delay_min;
+	/* change the unit from usec to bictcp_HZ */
+	t <<= BICTCP_HZ;
+	t /= USEC_PER_SEC;
+
+	if (t < ca->bic_K)		/* t - K */
+		offs = ca->bic_K - t;
+	else
+		offs = t - ca->bic_K;
+
+	/* c/rtt * (t-K)^3 */
+	delta = (cube_rtt_scale * offs * offs * offs) >> (10+3*BICTCP_HZ);
+	if (t < ca->bic_K)                            /* below origin*/
+		bic_target = ca->bic_origin_point - delta;
+	else                                          /* above origin*/
+		bic_target = ca->bic_origin_point + delta;
+
+	/* cubic function - calc bictcp_cnt*/
+	if (bic_target > cwnd) {
+		ca->cnt = cwnd / (bic_target - cwnd);
+	} else {
+		ca->cnt = 100 * cwnd;              /* very small increment*/
+	}
+
+	/*
+	 * The initial growth of cubic function may be too conservative
+	 * when the available bandwidth is still unknown.
+	 */
+	if (ca->last_max_cwnd == 0 && ca->cnt > 20)
+		ca->cnt = 20;	/* increase cwnd 5% per RTT */
+
+tcp_friendliness:
+	/* TCP Friendly */
+	if (tcp_friendliness) {
+		__u32 scale = beta_scale;
+		__u32 n;
+
+		/* update tcp cwnd */
+		delta = (cwnd * scale) >> 3;
+		if (ca->ack_cnt > delta && delta) {
+			n = ca->ack_cnt / delta;
+			ca->ack_cnt -= n * delta;
+			ca->tcp_cwnd += n;
+		}
+
+		if (ca->tcp_cwnd > cwnd) {	/* if bic is slower than tcp */
+			delta = ca->tcp_cwnd - cwnd;
+			max_cnt = cwnd / delta;
+			if (ca->cnt > max_cnt)
+				ca->cnt = max_cnt;
+		}
+	}
+
+	/* The maximum rate of cwnd increase CUBIC allows is 1 packet per
+	 * 2 packets ACKed, meaning cwnd grows at 1.5x per RTT.
+	 */
+	ca->cnt = max(ca->cnt, 2U);
+}
+
 SEC("struct_ops")
 void BPF_PROG(my_rtmp_cc_cong_avoid, struct sock *sk, __u32 ack, __u32 acked)
 {
@@ -86,16 +236,14 @@ void BPF_PROG(my_rtmp_cc_cong_avoid, struct sock *sk, __u32 ack, __u32 acked)
 
     if (*in_cong) {
         if (now - *start_time >= DELAY_NS) {
-            tcp_reno_cong_avoid(sk, ack, acked);
+            bictcp_update(ca, tp->snd_cwnd, acked);
         } else {
             bpf_printk("Waiting for 3 seconds to adjust cwnd.");
             return;
         }
     } else {
-        tcp_reno_cong_avoid(sk, ack, acked);
+        bictcp_update(ca, tp->snd_cwnd, acked);
     }
-    __u32 cwnd_after = BPF_CORE_READ(tp, snd_cwnd);
-    bpf_printk("After adjusting cwnd: %u", cwnd_after);
 }
 
 // cong_ops: undo_cwnd
