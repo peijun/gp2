@@ -51,7 +51,7 @@ __u32 my_rtmp_cc_ssthresh(struct sock *sk) {
     return cwnd / 2 < 2 ? 2 : cwnd / 2;
 }
 
-extern void cubictcp_cong_avoid(struct sock *sk, u32 ack, u32 acked) __ksym;
+extern void tcp_reno_cong_avoid(struct sock *sk, u32 ack, u32 acked) __ksym;
 
 SEC("struct_ops")
 void BPF_PROG(my_rtmp_cc_cong_avoid, struct sock *sk, __u32 ack, __u32 acked)
@@ -95,13 +95,13 @@ void BPF_PROG(my_rtmp_cc_cong_avoid, struct sock *sk, __u32 ack, __u32 acked)
     // 既存のロジック: 一定時間経過後に回避アルゴリズム呼び出し
     if (*in_cong) {
         if (now - *start_time >= DELAY_NS) {
-            cubictcp_cong_avoid(sk, ack, acked);
+            tcp_reno_cong_avoid(sk, ack, acked);
         } else {
             bpf_printk("Waiting for 3 seconds to adjust cwnd.");
             // 処理を終えてウィンドウサイズ確認へ（最後の更新処理に進む）
         }
     } else {
-        cubictcp_cong_avoid(sk, ack, acked);
+        tcp_reno_cong_avoid(sk, ack, acked);
     }
 
     // ---- ここからウィンドウサイズ変更検出の追加処理 ----
