@@ -14,15 +14,23 @@ struct {
     __uint(type, BPF_MAP_TYPE_HASH);
     __uint(max_entries, 1024);
     __type(key, __u64);    // ソケットID
-    __type(value, __u64); // 輻輳開始時刻(ns), 0なら非輻輳
+    __type(value, __u64);  // 輻輳開始時刻(ns), 0なら非輻輳
 } congestion_start_map SEC(".maps");
 
 struct {
     __uint(type, BPF_MAP_TYPE_HASH);
     __uint(max_entries, 1024);
     __type(key, __u64);
-    __type(value, bool);  // in_congestionフラグ
+    __type(value, bool);   // in_congestionフラグ
 } congestion_flag_map SEC(".maps");
+
+// 追加: ウィンドウサイズ（ここでは snd_cwnd）を保持するためのマップ
+struct {
+    __uint(type, BPF_MAP_TYPE_HASH);
+    __uint(max_entries, 1024);
+    __type(key, __u64);   // ソケットID
+    __type(value, __u32); // ウィンドウサイズ（snd_cwnd）
+} window_size_map SEC(".maps");
 
 // ソケットID取得
 static __always_inline __u64 get_sock_id(const struct tcp_sock *tp) {
@@ -32,7 +40,7 @@ static __always_inline __u64 get_sock_id(const struct tcp_sock *tp) {
 
 static __always_inline struct tcp_sock *tcp_sk(const struct sock *sk)
 {
-	return (struct tcp_sock *)sk;
+    return (struct tcp_sock *)sk;
 }
 
 // cong_ops: ssthresh計算
@@ -43,209 +51,7 @@ __u32 my_rtmp_cc_ssthresh(struct sock *sk) {
     return cwnd / 2 < 2 ? 2 : cwnd / 2;
 }
 
-extern void tcp_reno_cong_avoid(struct sock *sk, __u32 ack, __u32 acked) __ksym;
-
-static const __u8 v[] = {
-	/* 0x00 */    0,   54,   54,   54,  118,  118,  118,  118,
-	/* 0x08 */  123,  129,  134,  138,  143,  147,  151,  156,
-	/* 0x10 */  157,  161,  164,  168,  170,  173,  176,  179,
-	/* 0x18 */  181,  185,  187,  190,  192,  194,  197,  199,
-	/* 0x20 */  200,  202,  204,  206,  209,  211,  213,  215,
-	/* 0x28 */  217,  219,  221,  222,  224,  225,  227,  229,
-	/* 0x30 */  231,  232,  234,  236,  237,  239,  240,  242,
-	/* 0x38 */  244,  245,  246,  248,  250,  251,  252,  254,
-};
-
-static int fast_convergence = 1;
-static const int beta = 717;	/* = 717/1024 (BICTCP_BETA_SCALE) */
-static int initial_ssthresh;
-static const int bic_scale = 41;
-static int tcp_friendliness = 1;
-extern unsigned long CONFIG_HZ __kconfig;
-#define BICTCP_BETA_SCALE    1024
-#define	BICTCP_HZ		10	/* BIC HZ 2^10 = 1024 */
-#define HZ CONFIG_HZ
-#define USEC_PER_MSEC	1000UL
-#define USEC_PER_SEC	1000000UL
-#define USEC_PER_JIFFY	(USEC_PER_SEC / HZ)
-
-static const __u64 cube_factor = (__u64)(1ull << (10+3*BICTCP_HZ))
-				/ (bic_scale * 10);
-static const __u32 cube_rtt_scale = (bic_scale * 10);	/* 1024*c/rtt */
-static const __u32 beta_scale = 8*(BICTCP_BETA_SCALE+beta) / 3
-				/ (BICTCP_BETA_SCALE - beta);
-
-/* BIC TCP Parameters */
-struct bpf_bictcp {
-	__u32	cnt;		/* increase cwnd by 1 after ACKs */
-	__u32	last_max_cwnd;	/* last maximum snd_cwnd */
-	__u32	last_cwnd;	/* the last snd_cwnd */
-	__u32	last_time;	/* time when updated last_cwnd */
-	__u32	bic_origin_point;/* origin point of bic function */
-	__u32	bic_K;		/* time to origin point
-				   from the beginning of the current epoch */
-	__u32	delay_min;	/* min delay (usec) */
-	__u32	epoch_start;	/* beginning of an epoch */
-	__u32	ack_cnt;	/* number of acks */
-	__u32	tcp_cwnd;	/* estimated tcp cwnd */
-	__u16	unused;
-	__u8	sample_cnt;	/* number of samples to decide curr_rtt */
-	__u8	found;		/* the exit point is found? */
-	__u32	round_start;	/* beginning of each round */
-	__u32	end_seq;	/* end_seq of the round */
-	__u32	last_ack;	/* last time when the ACK spacing is close */
-	__u32	curr_rtt;	/* the minimum rtt of current round */
-};
-
-static __u64 div64_u64(__u64 dividend, __u64 divisor)
-{
-	return dividend / divisor;
-}
-
-#define max(a, b) ((a) > (b) ? (a) : (b))
-
-static __u32 cubic_root(__u64 a)
-{
-	__u32 x, b, shift;
-
-	if (a < 64) {
-		/* a in [0..63] */
-		return ((__u32)v[(__u32)a] + 35) >> 6;
-	}
-
-	b = fls64(a);
-	b = ((b * 84) >> 8) - 1;
-	shift = (a >> (b * 3));
-
-	/* it is needed for verifier's bound check on v */
-	if (shift >= 64)
-		return 0;
-
-	x = ((__u32)(((__u32)v[shift] + 10) << b)) >> 6;
-
-	/*
-	 * Newton-Raphson iteration
-	 *                         2
-	 * x    = ( 2 * x  +  a / x  ) / 3
-	 *  k+1          k         k
-	 */
-	x = (2 * x + (__u32)div64_u64(a, (__u64)x * (__u64)(x - 1)));
-	x = ((x * 341) >> 10);
-	return x;
-}
-
-static void bictcp_update(struct bpf_bictcp *ca, __u32 cwnd, __u32 acked)
-{
-	__u32 delta, bic_target, max_cnt;
-	__u64 offs, t;
-
-	ca->ack_cnt += acked;	/* count the number of ACKed packets */
-
-	if (ca->last_cwnd == cwnd &&
-	    (__s64)(bpf_jiffies64 - ca->last_time) <= HZ / 32)
-		return;
-
-	/* The CUBIC function can update ca->cnt at most once per jiffy.
-	 * On all cwnd reduction events, ca->epoch_start is set to 0,
-	 * which will force a recalculation of ca->cnt.
-	 */
-	if (ca->epoch_start && bpf_jiffies64 == ca->last_time)
-		goto tcp_friendliness;
-
-	ca->last_cwnd = cwnd;
-	ca->last_time = bpf_jiffies64;
-
-	if (ca->epoch_start == 0) {
-		ca->epoch_start = bpf_jiffies64;	/* record beginning */
-		ca->ack_cnt = acked;			/* start counting */
-		ca->tcp_cwnd = cwnd;			/* syn with cubic */
-
-		if (ca->last_max_cwnd <= cwnd) {
-			ca->bic_K = 0;
-			ca->bic_origin_point = cwnd;
-		} else {
-			/* Compute new K based on
-			 * (wmax-cwnd) * (srtt>>3 / HZ) / c * 2^(3*bictcp_HZ)
-			 */
-			ca->bic_K = cubic_root(cube_factor
-					       * (ca->last_max_cwnd - cwnd));
-			ca->bic_origin_point = ca->last_max_cwnd;
-		}
-	}
-
-	/* cubic function - calc*/
-	/* calculate c * time^3 / rtt,
-	 *  while considering overflow in calculation of time^3
-	 * (so time^3 is done by using 64 bit)
-	 * and without the support of division of 64bit numbers
-	 * (so all divisions are done by using 32 bit)
-	 *  also NOTE the unit of those variables
-	 *	  time  = (t - K) / 2^bictcp_HZ
-	 *	  c = bic_scale >> 10
-	 * rtt  = (srtt >> 3) / HZ
-	 * !!! The following code does not have overflow problems,
-	 * if the cwnd < 1 million packets !!!
-	 */
-
-	t = (__s64)(bpf_jiffies64 - ca->epoch_start) * USEC_PER_JIFFY;
-	t += ca->delay_min;
-	/* change the unit from usec to bictcp_HZ */
-	t <<= BICTCP_HZ;
-	t /= USEC_PER_SEC;
-
-	if (t < ca->bic_K)		/* t - K */
-		offs = ca->bic_K - t;
-	else
-		offs = t - ca->bic_K;
-
-	/* c/rtt * (t-K)^3 */
-	delta = (cube_rtt_scale * offs * offs * offs) >> (10+3*BICTCP_HZ);
-	if (t < ca->bic_K)                            /* below origin*/
-		bic_target = ca->bic_origin_point - delta;
-	else                                          /* above origin*/
-		bic_target = ca->bic_origin_point + delta;
-
-	/* cubic function - calc bictcp_cnt*/
-	if (bic_target > cwnd) {
-		ca->cnt = cwnd / (bic_target - cwnd);
-	} else {
-		ca->cnt = 100 * cwnd;              /* very small increment*/
-	}
-
-	/*
-	 * The initial growth of cubic function may be too conservative
-	 * when the available bandwidth is still unknown.
-	 */
-	if (ca->last_max_cwnd == 0 && ca->cnt > 20)
-		ca->cnt = 20;	/* increase cwnd 5% per RTT */
-
-tcp_friendliness:
-	/* TCP Friendly */
-	if (tcp_friendliness) {
-		__u32 scale = beta_scale;
-		__u32 n;
-
-		/* update tcp cwnd */
-		delta = (cwnd * scale) >> 3;
-		if (ca->ack_cnt > delta && delta) {
-			n = ca->ack_cnt / delta;
-			ca->ack_cnt -= n * delta;
-			ca->tcp_cwnd += n;
-		}
-
-		if (ca->tcp_cwnd > cwnd) {	/* if bic is slower than tcp */
-			delta = ca->tcp_cwnd - cwnd;
-			max_cnt = cwnd / delta;
-			if (ca->cnt > max_cnt)
-				ca->cnt = max_cnt;
-		}
-	}
-
-	/* The maximum rate of cwnd increase CUBIC allows is 1 packet per
-	 * 2 packets ACKed, meaning cwnd grows at 1.5x per RTT.
-	 */
-	ca->cnt = max(ca->cnt, 2U);
-}
+extern void cubictcp_cong_avoid(struct sock *sk, u32 ack, u32 acked) __ksym;
 
 SEC("struct_ops")
 void BPF_PROG(my_rtmp_cc_cong_avoid, struct sock *sk, __u32 ack, __u32 acked)
@@ -287,16 +93,35 @@ void BPF_PROG(my_rtmp_cc_cong_avoid, struct sock *sk, __u32 ack, __u32 acked)
     __u32 cwnd_before = BPF_CORE_READ(tp, snd_cwnd);
     bpf_printk("Before adjusting cwnd: %u", cwnd_before);
 
+    // 既存のロジック: 一定時間経過後に回避アルゴリズム呼び出し
     if (*in_cong) {
         if (now - *start_time >= DELAY_NS) {
-            bictcp_update(ca, tp->snd_cwnd, acked);
+            cubictcp_cong_avoid(sk, ack, acked);
         } else {
             bpf_printk("Waiting for 3 seconds to adjust cwnd.");
-            return;
+            // 処理を終えてウィンドウサイズ確認へ（最後の更新処理に進む）
         }
     } else {
-        bictcp_update(ca, tp->snd_cwnd, acked);
+        cubictcp_cong_avoid(sk, ack, acked);
     }
+
+    // ---- ここからウィンドウサイズ変更検出の追加処理 ----
+    // cong_avoid 実行後の cwnd を取得し、前回記録していた値と違えばログ出力＆更新
+    __u32 cwnd_after = BPF_CORE_READ(tp, snd_cwnd);
+
+    // sid をキーに window_size_map から前回のウィンドウサイズを取得
+    __u32 *prev_cwnd_p = bpf_map_lookup_elem(&window_size_map, &sid);
+    if (!prev_cwnd_p) {
+        // エントリーがなければ作成する(初期化しただけの場合など)
+        bpf_map_update_elem(&window_size_map, &sid, &cwnd_after, BPF_ANY);
+    } else {
+        if (*prev_cwnd_p != cwnd_after) {
+            bpf_printk("Window size changed: %u -> %u", *prev_cwnd_p, cwnd_after);
+            // 新しい cwnd を書き込み
+            bpf_map_update_elem(&window_size_map, &sid, &cwnd_after, BPF_ANY);
+        }
+    }
+    // ---- 追加処理 終了 ----
 }
 
 // cong_ops: undo_cwnd
@@ -314,8 +139,15 @@ void my_rtmp_cc_init(struct sock *sk) {
     __u64 sid = (__u64)num;
     __u64 zero = 0;
     bool false_val = false;
+    
+    // congestion_start_map, congestion_flag_map の初期化
     bpf_map_update_elem(&congestion_start_map, &sid, &zero, BPF_ANY);
     bpf_map_update_elem(&congestion_flag_map, &sid, &false_val, BPF_ANY);
+
+    // 追加: window_size_map に初期ウィンドウサイズを登録（念のため）
+    struct tcp_sock *tp = tcp_sk(sk);
+    __u32 init_cwnd = BPF_CORE_READ(tp, snd_cwnd);
+    bpf_map_update_elem(&window_size_map, &sid, &init_cwnd, BPF_ANY);
 
     bpf_printk("Socket initialized.");
 }
@@ -326,6 +158,7 @@ void my_rtmp_cc_release(struct sock *sk) {
     __u64 sid = (__u64)num;
     bpf_map_delete_elem(&congestion_start_map, &sid);
     bpf_map_delete_elem(&congestion_flag_map, &sid);
+    bpf_map_delete_elem(&window_size_map, &sid);
 }
 
 SEC(".struct_ops") 
