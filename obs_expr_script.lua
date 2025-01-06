@@ -1,22 +1,30 @@
--- obslua というグローバル変数が既に定義されており、
--- これを利用してOBSの機能にアクセスします。
+----------------------------------------------------
+-- グローバル変数
+----------------------------------------------------
 obs           = obslua
 source_name   = ""  -- 選択中のメディアソース名を格納
+
+-- 再生回数を数える変数
+local play_count     = 0   -- 現在までに再生した回数
+local max_play_count = 6   -- 最終的に配信停止したい再生回数
 
 ----------------------------------------------------
 -- スクリプトの基本情報
 ----------------------------------------------------
 function script_description()
     return [[
-メディアソースが再生終了したら自動的に配信を停止するサンプルスクリプト。
+メディアソースが指定回数（デフォルト 6回）再生終了したら自動的に配信を停止するサンプルスクリプト。
 
 【機能概要】
 1) 配信が開始されたとき:
+   - 再生回数カウンタを0に初期化
    - 指定されたメディアソースを最初から再生し直す
    - 500msごとにメディアソースの再生状態をチェックする
 
 2) メディアソースが END (または STOP) 状態になったとき:
-   - 自動で配信停止
+   - 再生回数をカウント
+   - 指定回数 (デフォルト 6回) に満たない場合は自動で再生し直す
+   - 指定回数に到達したら配信停止
 
 【使い方】
 1. 「スクリプト」タブで本Luaファイルを読み込み
@@ -50,8 +58,8 @@ function script_properties()
                 obs.obs_property_list_add_string(p, name, name)
             end
         end
+        obs.source_list_release(sources)
     end
-    obs.source_list_release(sources)
 
     return props
 end
@@ -78,11 +86,15 @@ end
 function on_event(event)
     -- 配信が開始されたとき
     if event == obs.OBS_FRONTEND_EVENT_STREAMING_STARTED then
+        -- カウンタをリセット
+        play_count = 0
+
         -- メディアソースを再スタート
         restart_media_source()
+
         -- メディアソースの状態を定期チェック開始
         start_check_timer()
-    
+
     -- 配信が停止したとき
     elseif event == obs.OBS_FRONTEND_EVENT_STREAMING_STOPPED then
         -- タイマーを解除
@@ -121,7 +133,7 @@ function stop_check_timer()
 end
 
 ----------------------------------------------------
--- メディアソースの状態を確認し、再生終了なら配信停止
+-- メディアソースの状態を確認し、再生終了時の挙動を管理
 ----------------------------------------------------
 function check_media_state()
     if not source_name or source_name == "" then
@@ -132,12 +144,21 @@ function check_media_state()
         return
     end
 
-    -- OBSではメディアのステータスを取得できる
     local state = obs.obs_source_media_get_state(source)
     obs.obs_source_release(source)
 
-    -- 終了状態(ENDEDまたはSTOPPED) なら配信を停止
+    -- 終了状態(ENDEDまたはSTOPPED) なら
     if state == obs.OBS_MEDIA_STATE_ENDED or state == obs.OBS_MEDIA_STATE_STOPPED then
-        obs.obs_frontend_streaming_stop()
+        -- 再生回数を1回増加
+        play_count = play_count + 1
+        print("Media ended. play_count = " .. play_count)
+
+        -- まだ指定回数に達していなければ再生し直す
+        if play_count < max_play_count then
+            restart_media_source()
+        else
+            -- 指定回数(6回)に到達したら配信停止
+            obs.obs_frontend_streaming_stop()
+        end
     end
 end
